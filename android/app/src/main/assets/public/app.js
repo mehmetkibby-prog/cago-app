@@ -5,6 +5,66 @@ const store = {
   get(k,f){ try { return JSON.parse(localStorage.getItem(k)) ?? f; } catch { return f; } },
   set(k,v){ localStorage.setItem(k,JSON.stringify(v)); }
 };
+function savedTests(){return store.get("savedTests",[]).filter(x=>x&&x.id&&Array.isArray(x.questions)&&x.questions.length)}
+function writeSavedTest(snapshot){
+  const items=savedTests(),at=items.findIndex(x=>x.id===snapshot.id);
+  if(at<0)items.unshift(snapshot);else items[at]=snapshot;
+  store.set("savedTests",items.slice(0,50));
+}
+function savedTestId(){return `test-${Date.now()}-${Math.random().toString(36).slice(2,8)}`}
+function saveCurrentExam(){
+  const oldId=state.activeSavedTestId,id=oldId||savedTestId();state.activeSavedTestId=id;
+  writeSavedTest({
+    id,type:"normal",title:state.examTitle||"Kayıtlı Test",
+    questions:state.exam,index:state.index,correct:state.correct,wrong:state.wrong,
+    answered:state.answered,results:state.examResults,eliminatedChoices:state.eliminatedChoices,
+    createdAt:oldId?(savedTests().find(x=>x.id===oldId)?.createdAt||new Date().toISOString()):new Date().toISOString(),
+    updatedAt:new Date().toISOString()
+  });
+  toast(oldId?"Test kaydı güncellendi":"Test Kayıtlı Testler bölümüne kaydedildi");
+}
+function saveCurrentSimulation(){
+  const s=state.simulation;if(!s)return;
+  commitSimulationQuestionTime();
+  const oldId=state.activeSavedTestId,id=oldId||savedTestId(),remainingMs=Math.max(0,s.endsAt-Date.now());state.activeSavedTestId=id;
+  writeSavedTest({
+    id,type:"simulation",title:s.title||"Kayıtlı Sınav",
+    questions:s.questions,index:s.index,answers:s.answers,marked:s.marked,timeSpent:s.timeSpent,
+    minutes:s.minutes,remainingMs,eliminatedChoices:state.eliminatedChoices,
+    createdAt:oldId?(savedTests().find(x=>x.id===oldId)?.createdAt||new Date().toISOString()):new Date().toISOString(),
+    updatedAt:new Date().toISOString()
+  });
+  toast(oldId?"Test kaydı güncellendi":"Test Kayıtlı Testler bölümüne kaydedildi");
+}
+function resumeSavedTest(id){
+  const item=savedTests().find(x=>x.id===id);if(!item)return toast("Kayıtlı test bulunamadı.");
+  state.activeSavedTestId=item.id;
+  state.eliminatedChoices=item.eliminatedChoices||{};state.eliminationMode=false;
+  if(item.type==="simulation"){
+    clearInterval(state.simulationTimer);
+    state.simulation={questions:item.questions,answers:item.answers||{},marked:item.marked||[],timeSpent:item.timeSpent||{},activeQuestionId:null,questionEnteredAt:0,index:Math.min(item.index||0,item.questions.length-1),startedAt:Date.now(),endsAt:Date.now()+Math.max(1000,item.remainingMs??item.minutes*60000),minutes:item.minutes||60,title:item.title};
+    renderSimulationQuestion();
+    state.simulationTimer=setInterval(()=>{const s=state.simulation;if(!s)return clearInterval(state.simulationTimer);if(Date.now()>=s.endsAt)finishSimulation(true);else updateSimulationClock()},1000);
+    return;
+  }
+  Object.assign(state,{exam:item.questions,index:Math.min(item.index||0,item.questions.length-1),correct:item.correct||0,wrong:item.wrong||0,answered:Boolean(item.answered),examTitle:item.title||"Kayıtlı Test",examResults:item.results||[],questionStartedAt:Date.now()});
+  renderQuestion();
+}
+function removeSavedTest(id){
+  if(!confirm("Bu kayıtlı test silinsin mi?"))return;
+  store.set("savedTests",savedTests().filter(x=>x.id!==id));renderSavedTests();
+}
+function renderSavedTests(){
+  const items=savedTests();
+  setTitle("Kayıtlı Testler",`${items.length} kayıt`,true);
+  app.innerHTML=items.length?`<div class="saved-test-list">${items.map(x=>{
+    const answered=x.type==="simulation"?Object.keys(x.answers||{}).length:(x.results||[]).length;
+    const detail=x.type==="simulation"?`${answered} / ${x.questions.length} cevaplandı · ${Math.max(1,Math.ceil((x.remainingMs||0)/60000))} dk kaldı`:`${answered} / ${x.questions.length} soru tamamlandı`;
+    return `<article class="saved-test-card"><div><small>${x.type==="simulation"?"Sınav modu":"Açıklamalı test"}</small><h3>${esc(x.title)}</h3><p>${detail}<br>${new Date(x.updatedAt||x.createdAt).toLocaleString("tr-TR")}</p></div><div class="saved-test-actions"><button class="primary" data-resume="${x.id}">Devam Et</button><button class="danger" data-delete="${x.id}">Sil</button></div></article>`;
+  }).join("")}</div>`:`<section class="hero"><h2>Henüz kayıtlı test yok</h2><p>Bir test ekranındaki “Testi Kaydet” düğmesine bastığında burada görünür.</p></section>`;
+  document.querySelectorAll("[data-resume]").forEach(b=>b.onclick=()=>resumeSavedTest(b.dataset.resume));
+  document.querySelectorAll("[data-delete]").forEach(b=>b.onclick=()=>removeSavedTest(b.dataset.delete));
+}
 if(!store.get("v24_4k_fast_model",false)){store.set("aiModel","gpt-4.1-mini");store.set("v24_4k_fast_model",true)}
 const esc = (t="") => String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const shuffle = xs => { const a=[...xs]; for(let i=a.length-1;i;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]} return a; };
@@ -13,7 +73,7 @@ function offlineEducationSections(){return state.educationData?.sections||[]}
 function offlineEducationQuestions(){return offlineEducationSections().flatMap(s=>s.questions)}
 function allQuestions(){return [...state.data.sections.flatMap(s=>s.questions),...offlineEducationQuestions()]}
 function ids(key){return new Set(store.get(key,[]))}
-function setTitle(t,s="V26.3 Kişisel Akademi",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
+function setTitle(t,s="V26.4 Kişisel Akademi",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
 function nav(r){if(state.voiceLesson?.playing)stopWrongVoiceLesson(false);state.route=r;document.querySelectorAll("#bottom-nav button").forEach(b=>b.classList.toggle("active",b.dataset.route===r));({home:renderHome,wrong:renderWrong,stats:renderStats,voice:renderVoice,more:renderMore,settings:renderSettings}[r]||renderHome)()}
 
 function renderHome(){
@@ -31,12 +91,13 @@ function renderHome(){
     <button class="card feature workbook-feature" data-go="workbook"><b>📕 Kişisel Çalışma Kitabı</b><span>Yanlışlarından konu özeti, etkinlik ve yazdırılabilir kitapçık</span></button>
     <button class="card feature voice-lesson-feature" data-go="wrong-voice-lesson"><b>🎧 Yanlışlardan Sesli Ders</b><span>Not alma durakları ve ayarlanabilir konuşma hızı</span></button>
     <button class="card feature forgetting-feature" data-go="forgetting-risk"><b>⏳ Bugün Hatırlaman Gerekenler</b><span>Unutma riski yükselen bilgileri zamanında tekrar et</span></button>
+    <button class="card feature saved-tests-feature" data-go="saved-tests"><b>💾 Kayıtlı Testler</b><span>Kaydettiğin testlere kaldığın yerden devam et</span></button>
     <button class="card feature custom-exam-feature" data-go="custom-exam"><b>🧩 Deneme Oluşturucu</b><span>Bölümleri ve soru sayılarını kendin birleştir</span></button>
     <button class="card feature" data-go="study"><b>📚 Konu Çalışma Köşesi</b><span>Plan ve notlarını tut</span></button>
     <button class="card feature" data-go="profile"><b>👤 Kişisel Bilgi Köşesi</b><span>Hedeflerini düzenle</span></button>
   </div>
   <h3 class="section-title">Soru Bankası</h3><div class="grid">${state.data.sections.map(s=>`<button class="card section" data-id="${s.id}"><b>${esc(s.title)}</b><span class="pill">${s.questions.length} soru</span></button>`).join("")}</div>`;
-  $(".feature-grid").onclick=e=>{const b=e.target.closest("[data-go]");if(b)({teacher:renderTeacher,cards:renderFlashcards,memory:renderMemoryCenter,"offline-education":renderOfflineEducation,education:renderEducationCenter,"music-wrong-ai":renderMusicWrongAnalysis,workbook:renderPersonalWorkbook,"wrong-voice-lesson":renderWrongVoiceLesson,"forgetting-risk":renderForgettingRisk,"custom-exam":renderCustomExamBuilder,study:renderStudy,profile:renderProfile}[b.dataset.go])()};
+  $(".feature-grid").onclick=e=>{const b=e.target.closest("[data-go]");if(b)({teacher:renderTeacher,cards:renderFlashcards,memory:renderMemoryCenter,"offline-education":renderOfflineEducation,education:renderEducationCenter,"music-wrong-ai":renderMusicWrongAnalysis,workbook:renderPersonalWorkbook,"wrong-voice-lesson":renderWrongVoiceLesson,"forgetting-risk":renderForgettingRisk,"saved-tests":renderSavedTests,"custom-exam":renderCustomExamBuilder,study:renderStudy,profile:renderProfile}[b.dataset.go])()};
   document.querySelectorAll(".section").forEach(b=>b.onclick=()=>renderSection(b.dataset.id));
   $("#mixed").onclick=()=>startExam(shuffle(allQuestions()).slice(0,Math.min(50,allQuestions().length)),"Karışık Deneme");
   $("#custom-exam").onclick=renderCustomExamBuilder;
@@ -77,12 +138,12 @@ function renderOfflineEducationSection(id){
 function renderQuestionList(qs,title){setTitle(title,"Cevaplı çalışma listesi",true);app.innerHTML=`<div class="list">${qs.map((q,i)=>`<article class="list-item"><h3>${i+1}. ${esc(q.question)}</h3><div class="muted">Doğru cevap: <b>${q.answer}) ${esc(q.choices[q.answer])}</b></div>${q.explanation?`<p>${esc(q.explanation)}</p>`:""}</article>`).join("")}</div>`}
 function startExam(qs,title){
   if(!qs.length)return toast("Bu listede soru yok.");
-  Object.assign(state,{exam:qs,index:0,correct:0,wrong:0,answered:false,examTitle:title,examResults:[],questionStartedAt:Date.now(),eliminatedChoices:{},eliminationMode:false});renderQuestion();
+  Object.assign(state,{exam:qs,index:0,correct:0,wrong:0,answered:false,examTitle:title,examResults:[],questionStartedAt:Date.now(),eliminatedChoices:{},eliminationMode:false,activeSavedTestId:null});renderQuestion();
 }
 function renderQuestion(){
   const q=state.exam[state.index],hard=ids("hardQuestions").has(q.id),pct=Math.round(state.index/state.exam.length*100),hasSolution=Boolean(q.explanation?.trim()),eliminated=eliminatedChoiceSet(q);
   setTitle(state.examTitle,`Soru ${state.index+1} / ${state.exam.length}`,true);
-  app.innerHTML=`<div class="exam-head"><span class="pill">Doğru ${state.correct} · Yanlış ${state.wrong}</span><label class="hard-toggle"><input id="hard-check" type="checkbox" ${hard?"checked":""}> ★ Zor</label></div>
+  app.innerHTML=`<div class="exam-head"><span class="pill">Doğru ${state.correct} · Yanlış ${state.wrong}</span><div class="exam-head-actions"><button class="secondary save-test-button" id="save-test">💾 Testi Kaydet</button><label class="hard-toggle"><input id="hard-check" type="checkbox" ${hard?"checked":""}> ★ Zor</label></div></div>
   <div class="progress"><i style="width:${pct}%"></i></div><div class="question">${esc(q.question)}</div>
   ${choiceEliminationHtml()}
   <div>${Object.entries(q.choices).map(([k,v])=>`<button class="choice original-choice ${eliminated.has(k)?"eliminated":""}" data-key="${k}"><strong>${k}</strong><span>${esc(v)}</span></button>`).join("")}</div>
@@ -92,6 +153,7 @@ function renderQuestion(){
   ${similarQuestionHtml()}
   <div id="feedback"></div><div class="actions"><button class="primary hidden" id="next">${state.index===state.exam.length-1?"Sınavı Bitir":"Sonraki Soru"}</button></div>`;
   $("#hard-check").onchange=e=>toggleId("hardQuestions",q.id,e.target.checked,"Zor Sorular");
+  $("#save-test").onclick=saveCurrentExam;
   if(hasSolution)$("#solution-toggle").onclick=()=>{
     const box=$("#solution-box"),button=$("#solution-toggle"),opening=box.classList.contains("hidden");
     box.classList.toggle("hidden",!opening);button.setAttribute("aria-expanded",String(opening));
@@ -102,6 +164,15 @@ function renderQuestion(){
   mountSimilarQuestion(q);
   mountChoiceElimination(q,key=>answer(key),{isLocked:()=>state.answered});
   $("#next").onclick=()=>{if(++state.index>=state.exam.length)finishExam();else{state.answered=false;state.questionStartedAt=Date.now();renderQuestion()}};
+  if(state.answered){
+    const result=[...state.examResults].reverse().find(x=>questionStateKey(x.q)===questionStateKey(q));
+    if(result){
+      document.querySelectorAll(".original-choice").forEach(b=>{b.disabled=true;if(b.dataset.key===q.answer)b.classList.add("correct");else if(b.dataset.key===result.selected)b.classList.add("wrong")});
+      if($("#elimination-toggle"))$("#elimination-toggle").disabled=true;
+      $("#feedback").innerHTML=`<div class="result"><b>${result.ok?"Doğru!":"Yanlış."}</b>${!result.ok?`<br>Doğru cevap: ${q.answer}) ${esc(q.choices[q.answer])}`:""}</div>`;
+      $("#next").classList.remove("hidden");
+    }
+  }
 }
 function questionStateKey(q){return String(q?.id||q?.question||"question")}
 function eliminatedChoiceSet(q){return new Set(state.eliminatedChoices[questionStateKey(q)]||[])}
@@ -222,6 +293,7 @@ function educationAreaStats(area){
   return {...x,score:x.total?Math.round(x.correct/x.total*100):null};
 }
 function finishExam(){
+  if(state.activeSavedTestId){store.set("savedTests",savedTests().filter(x=>x.id!==state.activeSavedTestId));state.activeSavedTestId=null}
   const score=Math.round(state.correct/state.exam.length*100),h=store.get("history",[]);
   h.unshift({date:new Date().toISOString(),title:state.examTitle,total:state.exam.length,correct:state.correct,wrong:state.wrong,score});store.set("history",h.slice(0,100));
   setTitle("Sınav Sonu Otopsisi",state.examTitle,true);app.innerHTML=`<section class="hero center autopsy-hero"><h2>%${score}</h2><p>${state.correct} doğru · ${state.wrong} yanlış</p></section>
@@ -251,7 +323,7 @@ function renderSimulationQuestion(){
   const s=state.simulation,q=s.questions[s.index],selected=s.answers[q.id],marked=s.marked.includes(q.id),eliminated=eliminatedChoiceSet(q);
   if(s.activeQuestionId!==q.id){s.activeQuestionId=q.id;s.questionEnteredAt=Date.now()}
   setTitle(s.title||"Gerçek Sınav",`Soru ${s.index+1} / ${s.questions.length}`,true);
-  app.innerHTML=`<div class="simulation-bar"><b id="sim-clock">${simulationTime()}</b><span>${Object.keys(s.answers).length} cevaplandı · ${s.questions.length-Object.keys(s.answers).length} boş</span></div>
+  app.innerHTML=`<div class="simulation-bar"><b id="sim-clock">${simulationTime()}</b><span>${Object.keys(s.answers).length} cevaplandı · ${s.questions.length-Object.keys(s.answers).length} boş</span><button class="secondary save-test-button" id="save-simulation">💾 Testi Kaydet</button></div>
   <div class="progress"><i style="width:${Math.round((s.index+1)/s.questions.length*100)}%"></i></div><div class="question">${esc(q.question)}</div>
   ${choiceEliminationHtml()}
   <div>${Object.entries(q.choices).map(([k,v])=>`<button class="choice original-choice ${selected===k?"selected":""} ${eliminated.has(k)?"eliminated":""}" data-key="${k}"><strong>${k}</strong><span>${esc(v)}</span></button>`).join("")}</div>
@@ -265,6 +337,7 @@ function renderSimulationQuestion(){
   mountAiQuestionSolution(q,{simulation:true,selectedAnswer:()=>s.answers[q.id]||""});
   mountSimilarQuestion(q);
   mountChoiceElimination(q,key=>{s.answers[q.id]=key;renderSimulationQuestion()});
+  $("#save-simulation").onclick=saveCurrentSimulation;
   $("#sim-mark").onchange=e=>{s.marked=e.target.checked?[...new Set([...s.marked,q.id])]:s.marked.filter(x=>x!==q.id);renderSimulationQuestion()};
   document.querySelectorAll(".question-map button").forEach(b=>b.onclick=()=>{commitSimulationQuestionTime();s.index=+b.dataset.index;renderSimulationQuestion()});
   $("#sim-prev").onclick=()=>{commitSimulationQuestionTime();s.index--;renderSimulationQuestion()};
@@ -282,6 +355,7 @@ function confirmFinishSimulation(){
 }
 function finishSimulation(auto){
   const s=state.simulation;if(!s)return;clearInterval(state.simulationTimer);state.simulationTimer=null;
+  if(state.activeSavedTestId){store.set("savedTests",savedTests().filter(x=>x.id!==state.activeSavedTestId));state.activeSavedTestId=null}
   commitSimulationQuestionTime();
   const results=s.questions.map(q=>({q,selected:s.answers[q.id]||null,ok:s.answers[q.id]===q.answer}));
   results.filter(x=>x.selected).forEach(x=>{
@@ -353,10 +427,11 @@ function renderMore(){
   <button class="card workbook-feature" data-go="workbook"><b>📕 Kişisel Çalışma Kitabı</b></button>
   <button class="card voice-lesson-feature" data-go="wrong-voice-lesson"><b>🎧 Yanlışlardan Sesli Ders</b></button>
   <button class="card forgetting-feature" data-go="forgetting-risk"><b>⏳ Unutma Riski Sistemi</b></button>
+  <button class="card saved-tests-feature" data-go="saved-tests"><b>💾 Kayıtlı Testler</b></button>
   <button class="card custom-exam-feature" data-go="custom-exam"><b>🧩 Özel Deneme Oluştur</b></button>
   <button class="card" data-go="ai-center"><b>✨ AI Çalışma Merkezi</b></button><button class="card" data-go="study"><b>📚 Konu Çalışma</b></button>
   <button class="card" data-go="profile"><b>👤 Kişisel Bilgiler</b></button><button class="card" data-go="settings"><b>⚙ Ayarlar</b></button></div>`;
-  app.onclick=e=>{const b=e.target.closest("[data-go]");if(b)({hard:renderHard,cards:renderFlashcards,memory:renderMemoryCenter,simulation:renderSimulationSetup,"opera-ballet":renderOperaBallet,"offline-education":renderOfflineEducation,education:renderEducationCenter,"music-wrong-ai":renderMusicWrongAnalysis,workbook:renderPersonalWorkbook,"wrong-voice-lesson":renderWrongVoiceLesson,"forgetting-risk":renderForgettingRisk,"custom-exam":renderCustomExamBuilder,"ai-center":renderAiStudyCenter,study:renderStudy,profile:renderProfile,settings:renderSettings}[b.dataset.go])()};
+  app.onclick=e=>{const b=e.target.closest("[data-go]");if(b)({hard:renderHard,cards:renderFlashcards,memory:renderMemoryCenter,simulation:renderSimulationSetup,"opera-ballet":renderOperaBallet,"offline-education":renderOfflineEducation,education:renderEducationCenter,"music-wrong-ai":renderMusicWrongAnalysis,workbook:renderPersonalWorkbook,"wrong-voice-lesson":renderWrongVoiceLesson,"forgetting-risk":renderForgettingRisk,"saved-tests":renderSavedTests,"custom-exam":renderCustomExamBuilder,"ai-center":renderAiStudyCenter,study:renderStudy,profile:renderProfile,settings:renderSettings}[b.dataset.go])()};
 }
 function renderFlashcards(){
   setTitle("Ezber Kartları","Dokun ve cevabı gör",true);const sections=state.data.sections;
@@ -602,6 +677,7 @@ async function startCustomExam(){
 }
 function startSimulationWithQuestions(questions,minutes,title="Gerçek Sınav"){
   clearInterval(state.simulationTimer);
+  state.activeSavedTestId=null;
   state.eliminatedChoices={};state.eliminationMode=false;
   state.simulation={questions,answers:{},marked:[],timeSpent:{},activeQuestionId:null,questionEnteredAt:0,index:0,startedAt:Date.now(),endsAt:Date.now()+minutes*60000,minutes,title};
   renderSimulationQuestion();
@@ -923,7 +999,7 @@ async function buildTextPdf(title,text){
   for(let page=1;page<=pages;page++){
     pdf.setPage(page);pdf.setDrawColor(210,218,226);pdf.line(left,pageHeight-12,left+usableWidth,pageHeight-12);
     pdf.setFont("DejaVuSerif","normal");pdf.setFontSize(8);pdf.setTextColor(95,105,117);
-    pdf.text("Müzik Sınavı V26.3 · Kişisel çalışma çıktısı",left,pageHeight-8);
+    pdf.text("Müzik Sınavı V26.4 · Kişisel çalışma çıktısı",left,pageHeight-8);
     pdf.text(`${page} / ${pages}`,pageWidth-right,pageHeight-8,{align:"right"});
   }
   const arrayBuffer=pdf.output("arraybuffer");
