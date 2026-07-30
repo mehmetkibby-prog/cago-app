@@ -73,7 +73,7 @@ function offlineEducationSections(){return state.educationData?.sections||[]}
 function offlineEducationQuestions(){return offlineEducationSections().flatMap(s=>s.questions)}
 function allQuestions(){return [...state.data.sections.flatMap(s=>s.questions),...offlineEducationQuestions()]}
 function ids(key){return new Set(store.get(key,[]))}
-function setTitle(t,s="V26.9 Nitelikli Eğitim Bilimleri AI",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
+function setTitle(t,s="V26.10 Kaynaklı ve Çeşitli Eğitim Bilimleri AI",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
 function nav(r){if(state.voiceLesson?.playing)stopWrongVoiceLesson(false);state.route=r;document.querySelectorAll("#bottom-nav button").forEach(b=>b.classList.toggle("active",b.dataset.route===r));({home:renderHome,wrong:renderWrong,stats:renderStats,voice:renderVoice,more:renderMore,settings:renderSettings}[r]||renderHome)()}
 
 function renderHome(){
@@ -137,7 +137,26 @@ function renderOfflineEducationSection(id){
   $("#offline-start").onclick=()=>startExam(shuffle(section.questions).slice(0,+$("#offline-count").value),section.title);
   $("#offline-list").onclick=()=>renderQuestionList(section.questions,section.title);
 }
-function renderQuestionList(qs,title){setTitle(title,"Cevaplı çalışma listesi",true);app.innerHTML=`<div class="list">${qs.map((q,i)=>`<article class="list-item"><h3>${i+1}. ${esc(q.question)}</h3><div class="muted">Doğru cevap: <b>${q.answer}) ${esc(q.choices[q.answer])}</b></div>${q.explanation?`<p>${esc(q.explanation)}</p>`:""}</article>`).join("")}</div>`}
+function safeHttpUrl(value){
+  try{const url=new URL(String(value));return ["https:","http:"].includes(url.protocol)?url.href:""}catch(_){return ""}
+}
+function trustedEducationSourceUrl(value){
+  const href=safeHttpUrl(value);if(!href)return "";
+  const host=new URL(href).hostname.toLowerCase();
+  const trusted=host==="dergipark.org.tr"||host.endsWith(".dergipark.org.tr")||host==="trdizin.gov.tr"||host.endsWith(".trdizin.gov.tr")||host==="meb.gov.tr"||host.endsWith(".meb.gov.tr")||host==="yok.gov.tr"||host.endsWith(".yok.gov.tr")||host.endsWith(".edu.tr");
+  return trusted?href:"";
+}
+function questionSourcesHtml(q){
+  const sources=Array.isArray(q?.sources)?q.sources:[],style=q?.styleSource;
+  if(!sources.length&&!style)return "";
+  const verified=sources.map(source=>{
+    const name=esc(source.name||"Kaynak"),url=safeHttpUrl(source.url);
+    return url?`<li><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${name}</a></li>`:`<li>${name}</li>`;
+  }).join("");
+  const styleUrl=safeHttpUrl(style?.url),styleName=esc(style?.name||"Soru biçimi örneği");
+  return `<aside class="question-sources"><b>🔎 Bu sorunun kaynakları</b>${verified?`<small>Bilgi doğrulaması</small><ul>${verified}</ul>`:""}${style?`<small>Yalnız soru biçimi/çeşidi örneği</small><div>${styleUrl?`<a href="${esc(styleUrl)}" target="_blank" rel="noopener noreferrer">${styleName}</a>`:styleName}</div>`:""}</aside>`;
+}
+function renderQuestionList(qs,title){setTitle(title,"Cevaplı çalışma listesi",true);app.innerHTML=`<div class="list">${qs.map((q,i)=>`<article class="list-item"><h3>${i+1}. ${esc(q.question)}</h3><div class="muted">Doğru cevap: <b>${q.answer}) ${esc(q.choices[q.answer])}</b></div>${q.explanation?`<p>${esc(q.explanation)}</p>`:""}${questionSourcesHtml(q)}</article>`).join("")}</div>`}
 function startExam(qs,title){
   if(!qs.length)return toast("Bu listede soru yok.");
   Object.assign(state,{exam:qs,index:0,correct:0,wrong:0,answered:false,examTitle:title,examResults:[],questionStartedAt:Date.now(),eliminatedChoices:{},eliminationMode:false,activeSavedTestId:null});renderQuestion();
@@ -148,10 +167,11 @@ function renderQuestion(){
   setTitle(state.examTitle,`Soru ${state.index+1} / ${state.exam.length}`,true);
   app.innerHTML=`<div class="exam-head"><span class="pill">Doğru ${state.correct} · Yanlış ${state.wrong}</span><div class="exam-head-actions"><button class="secondary save-test-button" id="save-test">💾 Testi Kaydet</button><label class="hard-toggle"><input id="hard-check" type="checkbox" ${hard?"checked":""}> ★ Zor</label></div></div>
   <div class="progress"><i style="width:${pct}%"></i></div><div class="question">${esc(q.question)}</div>
+  ${questionSourcesHtml(q)}
   ${questionVoiceButtonHtml()}
   ${choiceEliminationHtml()}
   <div>${Object.entries(q.choices).map(([k,v])=>`<button class="choice original-choice ${eliminated.has(k)?"eliminated":""}" data-key="${k}"><strong>${k}</strong><span>${esc(v)}</span></button>`).join("")}</div>
-  ${hasSolution?`<div class="solution-actions"><button class="secondary solution-toggle" id="solution-toggle" aria-expanded="false">📖 Ayrıntılı Çözümü Göster</button></div><div class="solution-box hidden" id="solution-box"><b>Kitaptaki Ayrıntılı Çözüm</b><p>${esc(q.explanation)}</p></div>`:""}
+  ${hasSolution?`<div class="solution-actions"><button class="secondary solution-toggle" id="solution-toggle" aria-expanded="false">📖 Ayrıntılı Çözümü Göster</button></div><div class="solution-box hidden" id="solution-box"><b>${q.sources?.length?"Gerekçeli Çözüm":"Kitaptaki Ayrıntılı Çözüm"}</b><p>${esc(q.explanation)}</p></div>`:""}
   ${topicLessonHtml()}
   ${aiQuestionSolutionHtml()}
   ${similarQuestionHtml()}
@@ -331,6 +351,7 @@ function renderSimulationQuestion(){
   setTitle(s.title||"Gerçek Sınav",`Soru ${s.index+1} / ${s.questions.length}`,true);
   app.innerHTML=`<div class="simulation-bar"><b id="sim-clock">${simulationTime()}</b><span>${Object.keys(s.answers).length} cevaplandı · ${s.questions.length-Object.keys(s.answers).length} boş</span><button class="secondary save-test-button" id="save-simulation">💾 Testi Kaydet</button></div>
   <div class="progress"><i style="width:${Math.round((s.index+1)/s.questions.length*100)}%"></i></div><div class="question">${esc(q.question)}</div>
+  ${questionSourcesHtml(q)}
   ${questionVoiceButtonHtml()}
   ${choiceEliminationHtml()}
   <div>${Object.entries(q.choices).map(([k,v])=>`<button class="choice original-choice ${selected===k?"selected":""} ${eliminated.has(k)?"eliminated":""}" data-key="${k}"><strong>${k}</strong><span>${esc(v)}</span></button>`).join("")}</div>
@@ -535,7 +556,7 @@ function renderStudy(){
 function renderEducationCenter(){
   const stats=EDUCATION_AREAS.map(area=>({area,...educationAreaStats(area)}));
   setTitle("AI Eğitim Bilimleri Merkezi","7 alanlık kişisel çalışma merkezi",true);
-  app.innerHTML=`<section class="hero education-hero"><h2>AI Eğitim Bilimleri</h2><p>Felsefe ve sosyoloji hariç yedi ana alanda çalış. AI soruları MEB, YÖK, üniversiteler ve Türkçe akademik kaynakları tarayarak hazırlar.</p></section>
+  app.innerHTML=`<section class="hero education-hero"><h2>AI Eğitim Bilimleri</h2><p>Felsefe ve sosyoloji hariç yedi ana alanda çalış. AI, farklı sınav sitelerinden soru biçimi çeşitliliğini inceler; bilgiyi MEB, YÖK, üniversiteler ve Türkçe akademik kaynaklarla doğrular. Her soruda kaynak görünür.</p></section>
   <div class="education-dashboard">${stats.map(x=>`<button class="education-stat" data-area="${esc(x.area)}"><span>${esc(x.area)}</span><b>${x.score===null?"Yeni":`%${x.score}`}</b><small>${x.total?`${x.total} soru`:"Henüz çözülmedi"}</small><i><em style="width:${x.score||0}%"></em></i></button>`).join("")}</div>
   <div class="feature-grid education-tools">
     <button class="card feature" data-tool="lesson"><b>📖 AI Konu Anlatımı</b><span>Özet, sınavlık veya ayrıntılı anlatım</span></button>
@@ -611,6 +632,7 @@ function startWeakEducationStudy(){
 }
 function educationPrompt(groups,focus){
   const distribution=groups.map(x=>`${x.area}: ${x.count} soru`).join(", ");
+  const total=groups.reduce((n,x)=>n+x.count,0);
   return `KPSS ve KKTC Kamu Hizmeti Komisyonu Eğitim Bilimleri sınavı düzeyinde toplam ${groups.reduce((n,x)=>n+x.count,0)} özgün, dört seçenekli soru üret. Dağılım: ${distribution}. Felsefe ve Sosyoloji dahil olmasın. Odak: ${focus}.
 
 Önce web taraması yap ve sorulardaki bilgileri güncel, güvenilir Türkçe kaynaklarla doğrula. Kaynak önceliği:
@@ -618,22 +640,30 @@ function educationPrompt(groups,focus){
 2. YÖK ve YÖK Ulusal Tez Merkezi (yok.gov.tr, tez.yok.gov.tr),
 3. Türkiye'deki üniversitelerin resmî eğitim fakültesi, ders içeriği, açık ders ve akademik yayın sayfaları (.edu.tr),
 4. DergiPark ve TR Dizin'deki Türkçe hakemli akademik yayınlar.
-Blog, forum, sosyal medya, reklam/özet siteleri ve kaynağı belirsiz soru bankalarını bilgi kaynağı olarak kullanma. Mümkünse kritik bilgiyi iki bağımsız güvenilir kaynakla karşılaştır. Kaynaklar çelişirse soru üretme. Güncel mevzuat veya program sorularında mutlaka resmî MEB/YÖK kaynağını esas al. Kaynaklardaki soruları kopyalama; yalnız doğrulanmış bilgiden özgün soru yaz.
+Blog, forum, sosyal medya, reklam/özet siteleri ve kaynağı belirsiz soru bankalarını BİLGİ DOĞRULAMA kaynağı olarak kullanma. Mümkünse kritik bilgiyi iki bağımsız güvenilir kaynakla karşılaştır. Kaynaklar çelişirse soru üretme. Güncel mevzuat veya program sorularında mutlaka resmî MEB/YÖK kaynağını esas al. Kaynaklardaki soruları kopyalama; yalnız doğrulanmış bilgiden özgün soru yaz.
+
+SORU BİÇİMİ ARAŞTIRMASI:
+- Sınavtime, OnlineSoru, SoruMarket, Sinavcoz ve erişilebiliyorsa Pegem/çıkmış soru sayfalarına yalnız soru türlerinin, kök yapılarının ve konu dağılımının çeşitliliğini görmek için bak.
+- Bu sitelerdeki soruları, cümleleri, kişi adlarını veya seçenekleri kopyalama ve onları bilimsel bilgi kaynağı sayma.
+- Her yeni soruyu sıfırdan yaz. ÖSYM/KPSS ve uygulamadaki KHK 2025 sorularının ölçme yaklaşımına benzesin ama hiçbir sorunun yakın yeniden yazımı olmasın.
 
 SORU KALİTESİ VE ÜSLUP:
 - Uygulamadaki “KHK Çalışma Soruları 2025” düzeyini ve soru kurma biçimini örnek al; hiçbir mevcut soruyu veya kişi adını kopyalama.
-- Soruların yaklaşık %60'ı 2-5 cümlelik anlamlı öğretmen-öğrenci, sınıf, okul, rehberlik ya da ölçme durumu üzerinden kavramı uygulatmalı.
-- Yaklaşık %25'i birden fazla bilgi, özellik, öncül veya kavram ayrımını birlikte yorumlatmalı.
-- Doğrudan tanım/eşleştirme soruları en fazla %15 olmalı; “X nedir?” biçimindeki tek satırlık basit soruları art arda üretme.
+- Bu ${total} soruda şu türleri dengeli ve dönüşümlü kullan: somut vaka/olay, I-II-III öncüllü, iki kavram veya kuramı karşılaştırma, “hangisi değildir/ulaşılamaz” biçiminde olumsuz kök, öğretmenin en uygun uygulamasını seçme, hata/yanılgı teşhisi, tablo-sonuç/ölçme verisi yorumlama ve neden-sonuç çıkarımı.
+- Aynı soru türünü art arda en fazla iki kez kullan. Sadece kavram adı bulduran sorular toplamın en fazla %10'u olsun.
+- Vaka sorularında her zaman öğrenci adı verme; bazen sınıf gözlemi, öğretmen kararı, veli görüşmesi, program komisyonu, rehberlik vakası, test sonucu veya okul süreci kullan.
+- Bazı sorular kısa ve yoğun olabilir; fakat kısa soru da iki bilgiyi ayırt ettirmeli. İçeriği olmayan yapay uzunluk oluşturma.
 - Soru kökü yalnız ezberi değil; ayırt etme, uygulama, yorumlama veya en uygun ilke/kavramı seçme becerisini ölçmeli.
-- Normal sorularda soru metni çoğunlukla en az 110 karakter olmalı. Vaka sorularında en az iki anlamlı cümle bulunmalı.
+- Soruların en az %80'i bilgi bakımından dolu, bağlamlı veya çoklu düşünme gerektiren yapıda olsun. Vaka sorularında en az iki anlamlı cümle bulunmalı.
 - Çeldiriciler aynı konu ve kavram ailesinden, birbirine yakın güçte ve dilbilgisel olarak soru köküyle uyumlu olmalı. Alakasız, komik veya kolay elenen seçenek yazma.
 - Doğru cevap seçenekler arasında dengeli dağılsın; sürekli aynı harfi kullanma.
 - Gereksiz uzunluk, yapay dolgu, çift olumsuzluk, “hepsi/hiçbiri”, tartışmalı bilgi ve birden çok doğru cevap oluşturma.
 - Her açıklama 2-4 cümle olsun: doğru kavramı gerekçelendir, sorudaki belirleyici ipucunu göster ve en güçlü çeldiriciden farkını kısaca açıkla.
 - Alan terimlerini doğru kullan; günlük Türkçe akıcı, sınav dili ciddi ve temiz olsun.
+- Her soru için bilgiyi gerçekten doğruladığın 1-3 sayfanın adını ve tam URL'sini infoSources alanına yaz. Arama sonucu adresi değil doğrudan sayfa adresi olsun; ziyaret etmediğin veya tahmin ettiğin URL'yi yazma.
+- styleSource alanına, yalnız soru biçimini incelerken gerçekten açtığın örnek test sitesini yaz. Uygun biçim sayfası bulamazsan styleSource null olsun.
 
-Yalnızca JSON döndür: {"questions":[{"area":"alan","question":"bağlamlı ve nitelikli soru","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"2-4 cümlelik gerekçeli açıklama"}]}`;
+Yalnızca JSON döndür: {"questions":[{"area":"alan","type":"vaka|öncüllü|karşılaştırma|olumsuz kök|uygulama|hata teşhisi|veri yorumlama|neden-sonuç","question":"nitelikli soru","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"2-4 cümlelik gerekçeli açıklama","infoSources":[{"name":"kurum veya yayın ve sayfa adı","url":"https://..."}],"styleSource":{"name":"site ve test adı","url":"https://..."}}]}`;
 }
 function splitEducationGroups(groups,size=7){
   const units=groups.flatMap(x=>Array.from({length:x.count},()=>x.area)),batches=[];
@@ -647,14 +677,20 @@ async function createEducationBatch(groups,focus){
   const expected=groups.reduce((n,x)=>n+x.count,0);
   const raw=await openAIWebText(
     educationPrompt(groups,focus),
-    "Sen Türk Eğitim Bilimleri alanında çalışan, KPSS ve KKTC KHK sınavlarının ölçme mantığını bilen titiz bir soru yazarı ve alan uzmanısın. Her üretimde web araması yap; MEB, YÖK, Türkiye'deki üniversiteler ve Türkçe hakemli akademik yayınları önceliklendir. Güvenilir kaynakla doğrulanamayan veya kaynaklar arasında tartışmalı olan bilgiden soru yazma. Eğitim Felsefesi ve Eğitim Sosyolojisine girme. Yedi ana alan dışına çıkma. Çok kısa, yüzeysel ve yalnız tanım soran maddeler üretme; bağlamlı, ayırt edici, güçlü çeldiricili ve tek kesin cevaplı sorular yaz. Yalnızca istenen JSON'u döndür.",
+    "Sen Türk Eğitim Bilimleri alanında çalışan, KPSS ve KKTC KHK sınavlarının ölçme mantığını bilen titiz bir soru yazarı ve alan uzmanısın. Her üretimde önce güvenilir bilgi kaynaklarını, sonra farklı soru biçimi örneklerini web'de araştır. MEB, YÖK, Türkiye'deki üniversiteler ve Türkçe hakemli akademik yayınlar bilgi doğrulama kaynaklarıdır. Sınavtime, OnlineSoru, SoruMarket, Sinavcoz ve Pegem benzeri test sayfaları yalnız biçim çeşitliliği içindir; içeriklerini kopyalama ve bilgi kaynağı olarak kullanma. Güvenilir kaynakla doğrulanamayan veya tartışmalı bilgiden soru yazma. Eğitim Felsefesi ve Eğitim Sosyolojisine girme. Sadece kavram adı soran seri üretim yapma; türleri değiştir, bağlamlı, ayırt edici, güçlü çeldiricili ve tek kesin cevaplı maddeler yaz. Her soruda gerçekten kullanılan kaynak adını ve URL'sini ver. Yalnızca istenen JSON'u döndür.",
     {maxOutputTokens:Math.max(2200,expected*520)}
   );
   const parsed=parseJsonResponse(raw);
   if(!Array.isArray(parsed.questions)||!parsed.questions.length)throw new Error("Eğitim Bilimleri soruları oluşturulamadı.");
   const valid=parsed.questions.filter(q=>q?.question&&q?.choices&&["A","B","C","D"].includes(q.answer)&&q.choices[q.answer]).slice(0,expected);
   if(valid.length!==expected)throw new Error(`AI ${expected} yerine ${valid.length} geçerli soru üretti. Lütfen yeniden dene.`);
-  return valid;
+  const sourced=valid.map(q=>({
+    ...q,
+    infoSources:Array.isArray(q.infoSources)?q.infoSources.map(x=>({name:x?.name||"",url:trustedEducationSourceUrl(x?.url)})).filter(x=>x.name&&x.url).slice(0,3):[],
+    styleSource:q.styleSource?.name&&safeHttpUrl(q.styleSource.url)?q.styleSource:null
+  }));
+  if(sourced.some(q=>!q.infoSources.length))throw new Error("Bazı sorularda güvenilir doğrulama kaynağı bulunamadı. Kaynaksız sorular gösterilmedi; lütfen yeniden dene.");
+  return sourced;
 }
 async function createEducationQuestionSet(groups,focus,onProgress=()=>{}){
   const batches=splitEducationGroups(groups),results=new Array(batches.length);let next=0,done=0;
@@ -665,10 +701,10 @@ async function createEducationQuestionSet(groups,focus,onProgress=()=>{}){
     }
   }
   await Promise.all(Array.from({length:Math.min(3,batches.length)},worker));
-  return results.flat().map((q,i)=>({id:`edu_${Date.now()}_${i}`,question:q.question,choices:q.choices,answer:q.answer,explanation:q.explanation,educationArea:q.area||groups[0].area}));
+  return results.flat().map((q,i)=>({id:`edu_${Date.now()}_${i}`,question:q.question,choices:q.choices,answer:q.answer,explanation:q.explanation,educationArea:q.area||groups[0].area,questionType:q.type||"",sources:q.infoSources||[],styleSource:q.styleSource||null}));
 }
 async function generateEducationQuestions(groups,focus,title,statusSelector,buttonSelector){
-  const status=$(statusSelector),button=$(buttonSelector);status.innerHTML='<div class="result">MEB, YÖK, üniversite ve Türkçe akademik kaynaklar taranıyor…</div>';button.disabled=true;
+  const status=$(statusSelector),button=$(buttonSelector);status.innerHTML='<div class="result">Soru türleri inceleniyor; MEB, YÖK, üniversite ve akademik kaynaklarda bilgiler doğrulanıyor…</div>';button.disabled=true;
   try{const qs=await createEducationQuestionSet(groups,focus,(done,total)=>status.innerHTML=`<div class="result">Kaynaklar doğrulanıyor · ${done}/${total} grup tamamlandı</div>`);startExam(shuffle(qs),title)}
   catch(e){status.innerHTML=`<div class="result">Hata: ${esc(e.message)}</div>`;button.disabled=false}
 }
@@ -1026,7 +1062,7 @@ async function buildTextPdf(title,text){
   for(let page=1;page<=pages;page++){
     pdf.setPage(page);pdf.setDrawColor(210,218,226);pdf.line(left,pageHeight-12,left+usableWidth,pageHeight-12);
     pdf.setFont("DejaVuSerif","normal");pdf.setFontSize(8);pdf.setTextColor(95,105,117);
-    pdf.text("Müzik Sınavı V26.9 · Kişisel çalışma çıktısı",left,pageHeight-8);
+    pdf.text("Müzik Sınavı V26.10 · Kişisel çalışma çıktısı",left,pageHeight-8);
     pdf.text(`${page} / ${pages}`,pageWidth-right,pageHeight-8,{align:"right"});
   }
   const arrayBuffer=pdf.output("arraybuffer");
@@ -1732,7 +1768,7 @@ function renderTeacher(){
   $("#send-teacher").onclick=async()=>{const t=$("#teacher-input").value.trim();if(!t)return;state.chat.push({role:"me",text:t});renderTeacher();const box=$("#chat");box.insertAdjacentHTML("beforeend",'<div class="message ai">Yanıt hazırlanıyor…</div>');try{const answer=await openAIText(t);state.chat.push({role:"ai",text:answer});renderTeacher()}catch(e){toast(e.message)}};
 }
 async function renderAiExam(){
-  setTitle("AI Eğitim Bilimleri","AI denemesi oluştur",true);app.innerHTML=`<section class="hero education-hero"><h2>Eğitim Bilimleri Denemesi</h2><p>KHK 2025 ve KPSS düzeyinde; bağlamlı, yorum gerektiren ve güçlü çeldiricili açıklamalı sorular oluşturur.</p></section><label>Alan</label><select id="ai-area"><option>Tüm alanlar</option>${EDUCATION_AREAS.map(x=>`<option>${x}</option>`).join("")}</select><div class="ai-control-grid"><div><label>Soru sayısı</label><select id="ai-count"><option>5</option><option>10</option><option>15</option><option selected>21</option><option>35</option></select></div><div><label>Zorluk</label><select id="ai-level"><option>Kolay</option><option selected>Orta</option><option>Zor</option></select></div></div><div class="actions"><button class="primary" id="generate">Deneme Oluştur</button><button class="secondary" id="education-home">Eğitim Bilimleri Merkezi</button></div><div id="ai-status"></div>`;
+  setTitle("AI Eğitim Bilimleri","AI denemesi oluştur",true);app.innerHTML=`<section class="hero education-hero"><h2>Eğitim Bilimleri Denemesi</h2><p>KHK 2025 ve KPSS düzeyinde; vaka, öncüllü, karşılaştırmalı, olumsuz köklü, uygulama ve veri yorumlama sorularını karışık oluşturur. Her soruda doğrulama kaynağı gösterilir.</p></section><label>Alan</label><select id="ai-area"><option>Tüm alanlar</option>${EDUCATION_AREAS.map(x=>`<option>${x}</option>`).join("")}</select><div class="ai-control-grid"><div><label>Soru sayısı</label><select id="ai-count"><option>5</option><option>10</option><option>15</option><option selected>21</option><option>35</option></select></div><div><label>Zorluk</label><select id="ai-level"><option>Kolay</option><option selected>Orta</option><option>Zor</option></select></div></div><div class="actions"><button class="primary" id="generate">Deneme Oluştur</button><button class="secondary" id="education-home">Eğitim Bilimleri Merkezi</button></div><div id="ai-status"></div>`;
   $("#generate").onclick=generateAiExam;
   $("#education-home").onclick=renderEducationCenter;
 }
