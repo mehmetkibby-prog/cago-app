@@ -73,7 +73,7 @@ function offlineEducationSections(){return state.educationData?.sections||[]}
 function offlineEducationQuestions(){return offlineEducationSections().flatMap(s=>s.questions)}
 function allQuestions(){return [...state.data.sections.flatMap(s=>s.questions),...offlineEducationQuestions()]}
 function ids(key){return new Set(store.get(key,[]))}
-function setTitle(t,s="V26.8 Kaynak Doğrulamalı AI",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
+function setTitle(t,s="V26.9 Nitelikli Eğitim Bilimleri AI",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
 function nav(r){if(state.voiceLesson?.playing)stopWrongVoiceLesson(false);state.route=r;document.querySelectorAll("#bottom-nav button").forEach(b=>b.classList.toggle("active",b.dataset.route===r));({home:renderHome,wrong:renderWrong,stats:renderStats,voice:renderVoice,more:renderMore,settings:renderSettings}[r]||renderHome)()}
 
 function renderHome(){
@@ -611,7 +611,7 @@ function startWeakEducationStudy(){
 }
 function educationPrompt(groups,focus){
   const distribution=groups.map(x=>`${x.area}: ${x.count} soru`).join(", ");
-  return `KPSS Eğitim Bilimleri düzeyinde toplam ${groups.reduce((n,x)=>n+x.count,0)} özgün, dört seçenekli soru üret. Dağılım: ${distribution}. Felsefe ve Sosyoloji dahil olmasın. Odak: ${focus}.
+  return `KPSS ve KKTC Kamu Hizmeti Komisyonu Eğitim Bilimleri sınavı düzeyinde toplam ${groups.reduce((n,x)=>n+x.count,0)} özgün, dört seçenekli soru üret. Dağılım: ${distribution}. Felsefe ve Sosyoloji dahil olmasın. Odak: ${focus}.
 
 Önce web taraması yap ve sorulardaki bilgileri güncel, güvenilir Türkçe kaynaklarla doğrula. Kaynak önceliği:
 1. MEB'in resmî mevzuat, öğretim programı, kılavuz ve yayınları (meb.gov.tr ve bağlı resmî MEB alan adları),
@@ -620,9 +620,20 @@ function educationPrompt(groups,focus){
 4. DergiPark ve TR Dizin'deki Türkçe hakemli akademik yayınlar.
 Blog, forum, sosyal medya, reklam/özet siteleri ve kaynağı belirsiz soru bankalarını bilgi kaynağı olarak kullanma. Mümkünse kritik bilgiyi iki bağımsız güvenilir kaynakla karşılaştır. Kaynaklar çelişirse soru üretme. Güncel mevzuat veya program sorularında mutlaka resmî MEB/YÖK kaynağını esas al. Kaynaklardaki soruları kopyalama; yalnız doğrulanmış bilgiden özgün soru yaz.
 
-Kurallar: kısa ve temiz Türkçe; tek kazanım; çoğunlukla doğrudan bilgi/kavram; vaka en fazla %30 ve 2-3 cümle; uzmanlık ayrıntısı, uzun öncül, çift olumsuzluk ve tartışmalı seçenek yok; tek kesin cevap; açıklama tek kısa cümle; kaynak soruyu birebir kopyalama.
+SORU KALİTESİ VE ÜSLUP:
+- Uygulamadaki “KHK Çalışma Soruları 2025” düzeyini ve soru kurma biçimini örnek al; hiçbir mevcut soruyu veya kişi adını kopyalama.
+- Soruların yaklaşık %60'ı 2-5 cümlelik anlamlı öğretmen-öğrenci, sınıf, okul, rehberlik ya da ölçme durumu üzerinden kavramı uygulatmalı.
+- Yaklaşık %25'i birden fazla bilgi, özellik, öncül veya kavram ayrımını birlikte yorumlatmalı.
+- Doğrudan tanım/eşleştirme soruları en fazla %15 olmalı; “X nedir?” biçimindeki tek satırlık basit soruları art arda üretme.
+- Soru kökü yalnız ezberi değil; ayırt etme, uygulama, yorumlama veya en uygun ilke/kavramı seçme becerisini ölçmeli.
+- Normal sorularda soru metni çoğunlukla en az 110 karakter olmalı. Vaka sorularında en az iki anlamlı cümle bulunmalı.
+- Çeldiriciler aynı konu ve kavram ailesinden, birbirine yakın güçte ve dilbilgisel olarak soru köküyle uyumlu olmalı. Alakasız, komik veya kolay elenen seçenek yazma.
+- Doğru cevap seçenekler arasında dengeli dağılsın; sürekli aynı harfi kullanma.
+- Gereksiz uzunluk, yapay dolgu, çift olumsuzluk, “hepsi/hiçbiri”, tartışmalı bilgi ve birden çok doğru cevap oluşturma.
+- Her açıklama 2-4 cümle olsun: doğru kavramı gerekçelendir, sorudaki belirleyici ipucunu göster ve en güçlü çeldiriciden farkını kısaca açıkla.
+- Alan terimlerini doğru kullan; günlük Türkçe akıcı, sınav dili ciddi ve temiz olsun.
 
-Yalnızca JSON döndür: {"questions":[{"area":"alan","question":"soru","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"tek kısa cümle"}]}`;
+Yalnızca JSON döndür: {"questions":[{"area":"alan","question":"bağlamlı ve nitelikli soru","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"2-4 cümlelik gerekçeli açıklama"}]}`;
 }
 function splitEducationGroups(groups,size=7){
   const units=groups.flatMap(x=>Array.from({length:x.count},()=>x.area)),batches=[];
@@ -636,8 +647,8 @@ async function createEducationBatch(groups,focus){
   const expected=groups.reduce((n,x)=>n+x.count,0);
   const raw=await openAIWebText(
     educationPrompt(groups,focus),
-    "Sen Türk Eğitim Bilimleri alanında çalışan titiz bir sınav uzmanısın. Her üretimde web araması yap; MEB, YÖK, Türkiye'deki üniversiteler ve Türkçe akademik yayınları önceliklendir. Güvenilir kaynakla doğrulanamayan veya kaynaklar arasında tartışmalı olan bilgiden soru yazma. Eğitim Felsefesi ve Eğitim Sosyolojisine girme. Yedi ana alan dışına çıkma. Kısa, açık Türkçe ve tek kesin cevap kullan. Yalnızca istenen JSON'u döndür.",
-    {maxOutputTokens:Math.max(1200,expected*260)}
+    "Sen Türk Eğitim Bilimleri alanında çalışan, KPSS ve KKTC KHK sınavlarının ölçme mantığını bilen titiz bir soru yazarı ve alan uzmanısın. Her üretimde web araması yap; MEB, YÖK, Türkiye'deki üniversiteler ve Türkçe hakemli akademik yayınları önceliklendir. Güvenilir kaynakla doğrulanamayan veya kaynaklar arasında tartışmalı olan bilgiden soru yazma. Eğitim Felsefesi ve Eğitim Sosyolojisine girme. Yedi ana alan dışına çıkma. Çok kısa, yüzeysel ve yalnız tanım soran maddeler üretme; bağlamlı, ayırt edici, güçlü çeldiricili ve tek kesin cevaplı sorular yaz. Yalnızca istenen JSON'u döndür.",
+    {maxOutputTokens:Math.max(2200,expected*520)}
   );
   const parsed=parseJsonResponse(raw);
   if(!Array.isArray(parsed.questions)||!parsed.questions.length)throw new Error("Eğitim Bilimleri soruları oluşturulamadı.");
@@ -1015,7 +1026,7 @@ async function buildTextPdf(title,text){
   for(let page=1;page<=pages;page++){
     pdf.setPage(page);pdf.setDrawColor(210,218,226);pdf.line(left,pageHeight-12,left+usableWidth,pageHeight-12);
     pdf.setFont("DejaVuSerif","normal");pdf.setFontSize(8);pdf.setTextColor(95,105,117);
-    pdf.text("Müzik Sınavı V26.8 · Kişisel çalışma çıktısı",left,pageHeight-8);
+    pdf.text("Müzik Sınavı V26.9 · Kişisel çalışma çıktısı",left,pageHeight-8);
     pdf.text(`${page} / ${pages}`,pageWidth-right,pageHeight-8,{align:"right"});
   }
   const arrayBuffer=pdf.output("arraybuffer");
@@ -1721,14 +1732,14 @@ function renderTeacher(){
   $("#send-teacher").onclick=async()=>{const t=$("#teacher-input").value.trim();if(!t)return;state.chat.push({role:"me",text:t});renderTeacher();const box=$("#chat");box.insertAdjacentHTML("beforeend",'<div class="message ai">Yanıt hazırlanıyor…</div>');try{const answer=await openAIText(t);state.chat.push({role:"ai",text:answer});renderTeacher()}catch(e){toast(e.message)}};
 }
 async function renderAiExam(){
-  setTitle("AI Eğitim Bilimleri","AI denemesi oluştur",true);app.innerHTML=`<section class="hero education-hero"><h2>Eğitim Bilimleri Denemesi</h2><p>KPSS düzeyinde; kısa, anlaşılır ve temel kazanımları ölçen açıklamalı sorular oluşturur.</p></section><label>Alan</label><select id="ai-area"><option>Tüm alanlar</option>${EDUCATION_AREAS.map(x=>`<option>${x}</option>`).join("")}</select><div class="ai-control-grid"><div><label>Soru sayısı</label><select id="ai-count"><option>5</option><option>10</option><option>15</option><option selected>21</option><option>35</option></select></div><div><label>Zorluk</label><select id="ai-level"><option>Kolay</option><option selected>Orta</option><option>Zor</option></select></div></div><div class="actions"><button class="primary" id="generate">Deneme Oluştur</button><button class="secondary" id="education-home">Eğitim Bilimleri Merkezi</button></div><div id="ai-status"></div>`;
+  setTitle("AI Eğitim Bilimleri","AI denemesi oluştur",true);app.innerHTML=`<section class="hero education-hero"><h2>Eğitim Bilimleri Denemesi</h2><p>KHK 2025 ve KPSS düzeyinde; bağlamlı, yorum gerektiren ve güçlü çeldiricili açıklamalı sorular oluşturur.</p></section><label>Alan</label><select id="ai-area"><option>Tüm alanlar</option>${EDUCATION_AREAS.map(x=>`<option>${x}</option>`).join("")}</select><div class="ai-control-grid"><div><label>Soru sayısı</label><select id="ai-count"><option>5</option><option>10</option><option>15</option><option selected>21</option><option>35</option></select></div><div><label>Zorluk</label><select id="ai-level"><option>Kolay</option><option selected>Orta</option><option>Zor</option></select></div></div><div class="actions"><button class="primary" id="generate">Deneme Oluştur</button><button class="secondary" id="education-home">Eğitim Bilimleri Merkezi</button></div><div id="ai-status"></div>`;
   $("#generate").onclick=generateAiExam;
   $("#education-home").onclick=renderEducationCenter;
 }
 async function generateAiExam(){
   const area=$("#ai-area").value,count=+$("#ai-count").value,level=$("#ai-level").value;
   const groups=area==="Tüm alanlar"?EDUCATION_AREAS.map((x,i)=>({area:x,count:Math.floor(count/7)+(i<count%7?1:0)})).filter(x=>x.count):[{area,count}];
-  await generateEducationQuestions(groups,`${level} KPSS düzeyi; kısa ve doğrudan bilgi-kavram soruları çoğunlukta, kısa vaka soruları en fazla %30`,"AI Eğitim Bilimleri","#ai-status","#generate");
+  await generateEducationQuestions(groups,`${level} KPSS/KHK düzeyi; bağlamlı uygulama ve yorum soruları çoğunlukta, güçlü çeldiricili, yüzeysel olmayan sınav soruları`,"AI Eğitim Bilimleri","#ai-status","#generate");
 }
 function renderVoice(){
   const live=!!state.rtc;setTitle("Realtime AI Voice","Canlı konuşma",false);
