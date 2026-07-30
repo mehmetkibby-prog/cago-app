@@ -10,7 +10,7 @@ Android projesidir.
 - A–D ve A–E cevap desteği
 - Zor Sorular listesi ve ayrı çözme modu
 - Cihazda kalıcı başarı geçmişi
-- AI Eğitim Bilimleri denemesi
+- Türkçe üniversite, MEB, ÖSYM ve akademik kaynak araştırmalı AI Eğitim Bilimleri denemesi
 - OpenAI Realtime AI Voice
 - Tablet ekranına uyumlu yatay/dikey arayüz
 

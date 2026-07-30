@@ -608,11 +608,21 @@ function startWeakEducationStudy(){
 }
 function educationPrompt(groups,focus){
   const distribution=groups.map(x=>`${x.area}: ${x.count} soru`).join(", ");
-  return `KPSS Eğitim Bilimleri düzeyinde toplam ${groups.reduce((n,x)=>n+x.count,0)} özgün, dört seçenekli soru üret. Dağılım: ${distribution}. Felsefe ve Sosyoloji dahil olmasın. Odak: ${focus}.
+  return `ÖNCE WEB ARAMASI YAP, SONRA SORULARI ÜRET.
 
-Kurallar: kısa ve temiz Türkçe; tek kazanım; çoğunlukla doğrudan bilgi/kavram; vaka en fazla %30 ve 2-3 cümle; uzmanlık ayrıntısı, uzun öncül, çift olumsuzluk ve tartışmalı seçenek yok; tek kesin cevap; açıklama tek kısa cümle; kaynak soruyu birebir kopyalama.
+Türkçe ve güvenilir kaynak önceliği:
+1. ÖSYM: osym.gov.tr üzerindeki sınav/kazanım ve örnek soru yaklaşımı,
+2. MEB: meb.gov.tr üzerindeki resmî öğretim, ölçme ve rehberlik içerikleri,
+3. Türk üniversiteleri: edu.tr uzantılı ders notları, açık ders malzemeleri ve fakülte yayınları,
+4. Akademik yayınlar: dergipark.org.tr, yok.gov.tr ve tubitak.gov.tr.
 
-Yalnızca JSON döndür: {"questions":[{"area":"alan","question":"soru","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"tek kısa cümle"}]}`;
+Seçilen alanların temel kavramlarını en az iki güvenilir Türkçe kaynaktan kontrol et. ÖSYM sorularını veya telifli kaynak sorularını kopyalama; yalnızca ölçme biçimi ve kazanım düzeyinden yararlan. Kaynaklar arasında uyuşmazlık varsa tartışmalı bilgiyi sorma. Kaynağı bulunamayan ayrıntıdan soru üretme.
+
+KPSS Eğitim Bilimleri düzeyinde toplam ${groups.reduce((n,x)=>n+x.count,0)} özgün, dört seçenekli soru üret. Dağılım: ${distribution}. Felsefe ve Sosyoloji dahil olmasın. Odak: ${focus}.
+
+Kurallar: kısa ve temiz Türkçe; tek kazanım; çoğunlukla doğrudan bilgi/kavram; vaka en fazla %30 ve 2-3 cümle; uzmanlık ayrıntısı, uzun öncül, çift olumsuzluk ve tartışmalı seçenek yok; tek kesin cevap; güçlü ve aynı kavram ailesinden çeldiriciler; açıklama kısa ve öğretici; kaynak soruyu birebir kopyalama.
+
+Yalnızca JSON döndür: {"questions":[{"area":"alan","question":"soru","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"doğru cevabı açıklayan kısa cümle","source":"yararlanılan kurum veya üniversite"}]}`;
 }
 function splitEducationGroups(groups,size=7){
   const units=groups.flatMap(x=>Array.from({length:x.count},()=>x.area)),batches=[];
@@ -624,10 +634,10 @@ function splitEducationGroups(groups,size=7){
 }
 async function createEducationBatch(groups,focus){
   const expected=groups.reduce((n,x)=>n+x.count,0);
-  const raw=await openAIText(
+  const raw=await openAIWebText(
     educationPrompt(groups,focus),
-    "KPSS Eğitim Bilimleri için kısa, açık ve hatasız Türkçe test yaz. Yedi alan dışına çıkma. Tek kesin cevap kullan. Yalnızca JSON döndür.",
-    {maxOutputTokens:Math.max(1200,expected*260)}
+    "Sen Eğitim Bilimleri alanında çalışan uzman bir sınav öğretmeni ve akademik kaynak doğrulayıcısısın. Her istekte web araması yapmak zorundasın. Yalnız Türkçe resmî, üniversite ve akademik kaynaklardan doğruladığın bilgileri kullan. Yedi alan dışına çıkma. Tek kesin cevap kullan. ÖSYM veya başka kaynaklardaki soruları kopyalama. Yalnızca istenen JSON'u döndür.",
+    {maxOutputTokens:Math.max(1600,expected*320),educationResearch:true}
   );
   const parsed=parseJsonResponse(raw);
   if(!Array.isArray(parsed.questions)||!parsed.questions.length)throw new Error("Eğitim Bilimleri soruları oluşturulamadı.");
@@ -644,11 +654,11 @@ async function createEducationQuestionSet(groups,focus,onProgress=()=>{}){
     }
   }
   await Promise.all(Array.from({length:Math.min(3,batches.length)},worker));
-  return results.flat().map((q,i)=>({id:`edu_${Date.now()}_${i}`,question:q.question,choices:q.choices,answer:q.answer,explanation:q.explanation,educationArea:q.area||groups[0].area}));
+  return results.flat().map((q,i)=>({id:`edu_${Date.now()}_${i}`,question:q.question,choices:q.choices,answer:q.answer,explanation:q.source?`${q.explanation} Kaynak: ${q.source}.`:q.explanation,educationArea:q.area||groups[0].area}));
 }
 async function generateEducationQuestions(groups,focus,title,statusSelector,buttonSelector){
-  const status=$(statusSelector),button=$(buttonSelector);status.innerHTML='<div class="result">Hızlı üretim başladı…</div>';button.disabled=true;
-  try{const qs=await createEducationQuestionSet(groups,focus,(done,total)=>status.innerHTML=`<div class="result">Sorular hazırlanıyor · ${done}/${total} grup tamamlandı</div>`);startExam(shuffle(qs),title)}
+  const status=$(statusSelector),button=$(buttonSelector);status.innerHTML='<div class="result">Türkçe üniversite, MEB, ÖSYM ve akademik kaynaklar araştırılıyor…</div>';button.disabled=true;
+  try{const qs=await createEducationQuestionSet(groups,focus,(done,total)=>status.innerHTML=`<div class="result">Kaynaklar doğrulandı, sorular hazırlanıyor · ${done}/${total} grup tamamlandı</div>`);startExam(shuffle(qs),title)}
   catch(e){status.innerHTML=`<div class="result">Hata: ${esc(e.message)}</div>`;button.disabled=false}
 }
 function renderCustomExamBuilder(){
@@ -1514,8 +1524,14 @@ function mountSimilarQuestion(q){
 }
 async function openAIWebText(input,instructions="",options={}){
   const key=store.get("apiKey","");if(!key)throw new Error("Önce Ayarlar bölümüne API anahtarını gir.");
-  const model=options.model||store.get("aiModel","gpt-4.1-mini"),body={model,instructions,input,tools:[{type:"web_search"}],max_output_tokens:options.maxOutputTokens||2400};
-  if(/^gpt-5/.test(model))body.reasoning={effort:"minimal"};
+  const model=options.model||store.get("aiModel","gpt-4.1-mini");
+  const webTool=options.educationResearch?{
+    type:"web_search",
+    search_context_size:"high",
+    filters:{allowed_domains:["osym.gov.tr","meb.gov.tr","edu.tr","dergipark.org.tr","yok.gov.tr","tubitak.gov.tr"]}
+  }:{type:"web_search"};
+  const body={model,instructions,input,tools:[webTool],tool_choice:options.educationResearch?"required":"auto",max_output_tokens:options.maxOutputTokens||2400};
+  if(/^gpt-5/.test(model))body.reasoning={effort:"low"};
   const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{Authorization:`Bearer ${key}`,"Content-Type":"application/json"},body:JSON.stringify(body)});
   if(!r.ok)throw new Error((await r.json()).error?.message||`HTTP ${r.status}`);const d=await r.json();return d.output_text||d.output?.flatMap(o=>o.content||[]).find(c=>c.type==="output_text")?.text||"Yanıt alınamadı.";
 }
