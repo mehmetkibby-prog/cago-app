@@ -1201,8 +1201,7 @@ function questionVoiceButtonHtml(){
   return `<div class="question-voice-actions"><button class="secondary question-voice-button" id="question-voice" type="button">🔊 Sesli Soru</button></div>`;
 }
 function questionVoiceText(q){
-  const choices=Object.entries(q?.choices||{}).map(([key,value])=>`${key} şıkkı. ${value}.`).join(" ");
-  return `Soru. ${q?.question||""}. ${choices}`.replace(/\s+/g," ").trim();
+  return `Soru. ${q?.question||""}.`.replace(/\s+/g," ").trim();
 }
 function mountQuestionVoice(q){
   const button=$("#question-voice");

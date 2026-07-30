@@ -1,7 +1,8 @@
-# Müzik Sınavı V26.3 — Tam Android ve GitHub Paketi
+# Müzik Sınavı V26.6 — Tam Android ve GitHub Paketi
 
-V26.3 Android Sesli Ders Motoru düzeltmesini içeren, GitHub Actions üzerinden
-debug APK oluşturabilen eksiksiz Android projesidir.
+V26.5 çalışan Android sürümünü koruyan ve “Sesli Soru” düğmesinde yalnızca
+soru kökünü okuyan, GitHub Actions üzerinden debug APK oluşturabilen eksiksiz
+Android projesidir.
 
 ## İçerik
 
