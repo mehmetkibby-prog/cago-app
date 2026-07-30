@@ -73,7 +73,7 @@ function offlineEducationSections(){return state.educationData?.sections||[]}
 function offlineEducationQuestions(){return offlineEducationSections().flatMap(s=>s.questions)}
 function allQuestions(){return [...state.data.sections.flatMap(s=>s.questions),...offlineEducationQuestions()]}
 function ids(key){return new Set(store.get(key,[]))}
-function setTitle(t,s="V26.10 Kaynaklı ve Çeşitli Eğitim Bilimleri AI",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
+function setTitle(t,s="V26.11 Tam Alan Taramalı ve Kaynaklı AI",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
 function nav(r){if(state.voiceLesson?.playing)stopWrongVoiceLesson(false);state.route=r;document.querySelectorAll("#bottom-nav button").forEach(b=>b.classList.toggle("active",b.dataset.route===r));({home:renderHome,wrong:renderWrong,stats:renderStats,voice:renderVoice,more:renderMore,settings:renderSettings}[r]||renderHome)()}
 
 function renderHome(){
@@ -144,6 +144,12 @@ function trustedEducationSourceUrl(value){
   const href=safeHttpUrl(value);if(!href)return "";
   const host=new URL(href).hostname.toLowerCase();
   const trusted=host==="dergipark.org.tr"||host.endsWith(".dergipark.org.tr")||host==="trdizin.gov.tr"||host.endsWith(".trdizin.gov.tr")||host==="meb.gov.tr"||host.endsWith(".meb.gov.tr")||host==="yok.gov.tr"||host.endsWith(".yok.gov.tr")||host.endsWith(".edu.tr");
+  return trusted?href:"";
+}
+function trustedQuestionStyleUrl(value){
+  const href=safeHttpUrl(value);if(!href)return "";
+  const host=new URL(href).hostname.toLowerCase().replace(/^www\./,"");
+  const trusted=host==="sinavtime.com"||host==="onlinesoru.com"||host==="sorumarket.com"||host==="sinavcoz.com"||host==="pegem.net"||host.endsWith(".pegem.net")||host==="pegemakademi.com"||host.endsWith(".pegemakademi.com");
   return trusted?href:"";
 }
 function questionSourcesHtml(q){
@@ -643,9 +649,20 @@ function educationPrompt(groups,focus){
 Blog, forum, sosyal medya, reklam/özet siteleri ve kaynağı belirsiz soru bankalarını BİLGİ DOĞRULAMA kaynağı olarak kullanma. Mümkünse kritik bilgiyi iki bağımsız güvenilir kaynakla karşılaştır. Kaynaklar çelişirse soru üretme. Güncel mevzuat veya program sorularında mutlaka resmî MEB/YÖK kaynağını esas al. Kaynaklardaki soruları kopyalama; yalnız doğrulanmış bilgiden özgün soru yaz.
 
 SORU BİÇİMİ ARAŞTIRMASI:
-- Sınavtime, OnlineSoru, SoruMarket, Sinavcoz ve erişilebiliyorsa Pegem/çıkmış soru sayfalarına yalnız soru türlerinin, kök yapılarının ve konu dağılımının çeşitliliğini görmek için bak.
+- Sinavtime, OnlineSoru, SoruMarket, Sinavcoz, Pegem'in erişilebilen örnek/çıkmış soru sayfaları ve bunlara benzer nitelikli Türkçe sınav sayfalarına yalnız soru türlerinin, kök yapılarının, güçlük düzeylerinin ve konu dağılımının çeşitliliğini görmek için bak.
 - Bu sitelerdeki soruları, cümleleri, kişi adlarını veya seçenekleri kopyalama ve onları bilimsel bilgi kaynağı sayma.
 - Her yeni soruyu sıfırdan yaz. ÖSYM/KPSS ve uygulamadaki KHK 2025 sorularının ölçme yaklaşımına benzesin ama hiçbir sorunun yakın yeniden yazımı olmasın.
+
+TAM ALAN VE ALT KONU KAPSAMI:
+- Yalnız en bilinen kavramlara yığılma. Seçilen alanın bütün temel alt konularını önce çıkar, sonra soruları farklı alt konulara dağıt.
+- Gelişim Psikolojisi: temel kavram/ilkeler, gelişim görevleri, fiziksel-psikomotor, bilişsel, dil, kişilik, ahlak ve sosyal-duygusal gelişim.
+- Öğrenme Psikolojisi: öğrenmeyi etkileyen etmenler, klasik/edimsel koşullanma, bağlaşımcılık, sosyal öğrenme, Gestalt, bilişsel öğrenme ve bilgiyi işleme.
+- Program Geliştirme: program türleri, temeller, tasarım yaklaşımları, hedef-içerik-eğitim durumu-değerlendirme, modeller ve program değerlendirme.
+- Öğretim İlke ve Yöntemleri: öğretim ilkeleri, strateji-yöntem-teknik ayrımı, anlatım/tartışma/örnek olay/problem/proje, bireysel öğretim, işbirlikli öğrenme ve çağdaş yaklaşımlar.
+- Ölçme ve Değerlendirme: ölçekler, hata, geçerlik-güvenirlik-kullanışlılık, madde/test istatistikleri, ölçüt ve değerlendirme türleri, alternatif değerlendirme.
+- Rehberlik: ilkeler, hizmet alanları, rehberlik türleri, bireyi tanıma teknikleri, psikolojik danışma, yöneltme ve özel eğitimle ilişkili temel uygulamalar.
+- Sınıf Yönetimi: modeller, sınıfın fiziksel/sosyal düzeni, zaman, iletişim, motivasyon, kural geliştirme, istenmeyen davranış ve çatışma yönetimi.
+- Bir üretim grubunda aynı alt konudan en fazla iki soru yaz; soru sayısı elverdiğince farklı alt konular kullan. Her sorunun "subtopic" alanında ölçtüğü alt konuyu belirt.
 
 SORU KALİTESİ VE ÜSLUP:
 - Uygulamadaki “KHK Çalışma Soruları 2025” düzeyini ve soru kurma biçimini örnek al; hiçbir mevcut soruyu veya kişi adını kopyalama.
@@ -663,7 +680,7 @@ SORU KALİTESİ VE ÜSLUP:
 - Her soru için bilgiyi gerçekten doğruladığın 1-3 sayfanın adını ve tam URL'sini infoSources alanına yaz. Arama sonucu adresi değil doğrudan sayfa adresi olsun; ziyaret etmediğin veya tahmin ettiğin URL'yi yazma.
 - styleSource alanına, yalnız soru biçimini incelerken gerçekten açtığın örnek test sitesini yaz. Uygun biçim sayfası bulamazsan styleSource null olsun.
 
-Yalnızca JSON döndür: {"questions":[{"area":"alan","type":"vaka|öncüllü|karşılaştırma|olumsuz kök|uygulama|hata teşhisi|veri yorumlama|neden-sonuç","question":"nitelikli soru","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"2-4 cümlelik gerekçeli açıklama","infoSources":[{"name":"kurum veya yayın ve sayfa adı","url":"https://..."}],"styleSource":{"name":"site ve test adı","url":"https://..."}}]}`;
+Yalnızca JSON döndür: {"questions":[{"area":"alan","subtopic":"ölçülen alt konu","type":"vaka|öncüllü|karşılaştırma|olumsuz kök|uygulama|hata teşhisi|veri yorumlama|neden-sonuç","question":"nitelikli soru","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"2-4 cümlelik gerekçeli açıklama","infoSources":[{"name":"kurum veya yayın ve sayfa adı","url":"https://..."}],"styleSource":{"name":"site ve test adı","url":"https://..."}}]}`;
 }
 function splitEducationGroups(groups,size=7){
   const units=groups.flatMap(x=>Array.from({length:x.count},()=>x.area)),batches=[];
@@ -677,7 +694,7 @@ async function createEducationBatch(groups,focus){
   const expected=groups.reduce((n,x)=>n+x.count,0);
   const raw=await openAIWebText(
     educationPrompt(groups,focus),
-    "Sen Türk Eğitim Bilimleri alanında çalışan, KPSS ve KKTC KHK sınavlarının ölçme mantığını bilen titiz bir soru yazarı ve alan uzmanısın. Her üretimde önce güvenilir bilgi kaynaklarını, sonra farklı soru biçimi örneklerini web'de araştır. MEB, YÖK, Türkiye'deki üniversiteler ve Türkçe hakemli akademik yayınlar bilgi doğrulama kaynaklarıdır. Sınavtime, OnlineSoru, SoruMarket, Sinavcoz ve Pegem benzeri test sayfaları yalnız biçim çeşitliliği içindir; içeriklerini kopyalama ve bilgi kaynağı olarak kullanma. Güvenilir kaynakla doğrulanamayan veya tartışmalı bilgiden soru yazma. Eğitim Felsefesi ve Eğitim Sosyolojisine girme. Sadece kavram adı soran seri üretim yapma; türleri değiştir, bağlamlı, ayırt edici, güçlü çeldiricili ve tek kesin cevaplı maddeler yaz. Her soruda gerçekten kullanılan kaynak adını ve URL'sini ver. Yalnızca istenen JSON'u döndür.",
+    "Sen Türk Eğitim Bilimleri alanının bütün alt konularına hâkim, KPSS ve KKTC KHK sınavlarının ölçme mantığını bilen titiz bir soru yazarı ve alan uzmanısın. Önce seçilen alanın alt konu haritasını kur; soruları birkaç popüler kavrama yığma. Her üretimde önce güvenilir bilgi kaynaklarını, sonra farklı soru biçimi örneklerini web'de araştır. MEB, YÖK, Türkiye'deki üniversiteler ve Türkçe hakemli akademik yayınlar bilgi doğrulama kaynaklarıdır. Sinavtime, OnlineSoru, SoruMarket, Sinavcoz ve Pegem benzeri test sayfaları yalnız biçim ve dağılım çeşitliliği içindir; içeriklerini kopyalama ve bilgi kaynağı olarak kullanma. Güvenilir kaynakla doğrulanamayan veya tartışmalı bilgiden soru yazma. Eğitim Felsefesi ve Eğitim Sosyolojisine girme. Sadece kavram adı soran seri üretim yapma; alt konuları ve türleri değiştir, bağlamlı, ayırt edici, güçlü çeldiricili ve tek kesin cevaplı maddeler yaz. Her soruda gerçekten kullanılan kaynak adını ve doğrudan URL'sini ver. Yalnızca istenen JSON'u döndür.",
     {maxOutputTokens:Math.max(2200,expected*520)}
   );
   const parsed=parseJsonResponse(raw);
@@ -687,9 +704,10 @@ async function createEducationBatch(groups,focus){
   const sourced=valid.map(q=>({
     ...q,
     infoSources:Array.isArray(q.infoSources)?q.infoSources.map(x=>({name:x?.name||"",url:trustedEducationSourceUrl(x?.url)})).filter(x=>x.name&&x.url).slice(0,3):[],
-    styleSource:q.styleSource?.name&&safeHttpUrl(q.styleSource.url)?q.styleSource:null
+    styleSource:q.styleSource?.name&&trustedQuestionStyleUrl(q.styleSource.url)?{name:q.styleSource.name,url:trustedQuestionStyleUrl(q.styleSource.url)}:null
   }));
   if(sourced.some(q=>!q.infoSources.length))throw new Error("Bazı sorularda güvenilir doğrulama kaynağı bulunamadı. Kaynaksız sorular gösterilmedi; lütfen yeniden dene.");
+  if(sourced.some(q=>!q.styleSource))throw new Error("Bazı sorularda Sinavtime, OnlineSoru, SoruMarket, Sinavcoz veya Pegem biçim örneği bulunamadı. Sorular gösterilmedi; lütfen yeniden dene.");
   return sourced;
 }
 async function createEducationQuestionSet(groups,focus,onProgress=()=>{}){
@@ -701,7 +719,7 @@ async function createEducationQuestionSet(groups,focus,onProgress=()=>{}){
     }
   }
   await Promise.all(Array.from({length:Math.min(3,batches.length)},worker));
-  return results.flat().map((q,i)=>({id:`edu_${Date.now()}_${i}`,question:q.question,choices:q.choices,answer:q.answer,explanation:q.explanation,educationArea:q.area||groups[0].area,questionType:q.type||"",sources:q.infoSources||[],styleSource:q.styleSource||null}));
+  return results.flat().map((q,i)=>({id:`edu_${Date.now()}_${i}`,question:q.question,choices:q.choices,answer:q.answer,explanation:q.explanation,educationArea:q.area||groups[0].area,educationSubtopic:q.subtopic||"",questionType:q.type||"",sources:q.infoSources||[],styleSource:q.styleSource||null}));
 }
 async function generateEducationQuestions(groups,focus,title,statusSelector,buttonSelector){
   const status=$(statusSelector),button=$(buttonSelector);status.innerHTML='<div class="result">Soru türleri inceleniyor; MEB, YÖK, üniversite ve akademik kaynaklarda bilgiler doğrulanıyor…</div>';button.disabled=true;
@@ -1062,7 +1080,7 @@ async function buildTextPdf(title,text){
   for(let page=1;page<=pages;page++){
     pdf.setPage(page);pdf.setDrawColor(210,218,226);pdf.line(left,pageHeight-12,left+usableWidth,pageHeight-12);
     pdf.setFont("DejaVuSerif","normal");pdf.setFontSize(8);pdf.setTextColor(95,105,117);
-    pdf.text("Müzik Sınavı V26.10 · Kişisel çalışma çıktısı",left,pageHeight-8);
+    pdf.text("Müzik Sınavı V26.11 · Kişisel çalışma çıktısı",left,pageHeight-8);
     pdf.text(`${page} / ${pages}`,pageWidth-right,pageHeight-8,{align:"right"});
   }
   const arrayBuffer=pdf.output("arraybuffer");
@@ -1690,8 +1708,8 @@ Soru kuralları:
 - Açıklamada doğru cevabın nedenini 1-2 cümleyle belirt.
 
 Yalnızca şu JSON yapısını döndür:
-{"questions":[{"question":"...","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"...","sourceNames":["Kaynak 1","Kaynak 2"]}]}`;
-  const instructions="Sen müzikoloji ve müzik eğitimi alanında titiz bir sınav editörüsün. Web araştırması yap, üniversite ve birincil kurum kaynaklarına öncelik ver, yalnız doğrulanmış bilgiyle Türkçe test soruları yaz. Çıktıda JSON dışında hiçbir metin kullanma.";
+{"questions":[{"question":"...","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"...","infoSources":[{"name":"kurum/yayın ve sayfa adı","url":"https://dogrudan-sayfa-adresi"}]}]}`;
+  const instructions="Sen müzikoloji ve müzik eğitimi alanında titiz bir sınav editörüsün. Web araştırması yap, üniversite ve birincil kurum kaynaklarına öncelik ver, yalnız doğrulanmış bilgiyle Türkçe test soruları yaz. Her soru için gerçekten açıp kullandığın kaynakların adını ve doğrudan sayfa URL'sini infoSources alanında ver; URL uydurma. Çıktıda JSON dışında hiçbir metin kullanma.";
   try{
     const text=await openAIWebText(prompt,instructions,{maxOutputTokens:Math.max(1800,count*300)});
     const parsed=parseJsonResponse(text);
@@ -1699,8 +1717,9 @@ Yalnızca şu JSON yapısını döndür:
     const qs=parsed.questions.map((q,i)=>{
       const choices=q.choices||{},answer=String(q.answer||"").toUpperCase();
       if(!q.question||Object.keys(choices).length!==4||!choices[answer])throw new Error(`${i+1}. sorunun yapısı eksik geldi.`);
-      const sources=Array.isArray(q.sourceNames)?q.sourceNames.filter(Boolean).slice(0,3):[];
-      return {id:`music_ai_${Date.now()}_${i}`,question:q.question,choices,answer,explanation:`${q.explanation||""}${sources.length?`\nKaynak doğrulaması: ${sources.join("; ")}`:""}`,area:`AI Müzik · ${area}`};
+      const sources=Array.isArray(q.infoSources)?q.infoSources.map(source=>({name:String(source?.name||"").trim(),url:safeHttpUrl(source?.url)})).filter(source=>source.name&&source.url).slice(0,3):[];
+      if(!sources.length)throw new Error(`${i+1}. soruda doğrulanabilir kaynak bağlantısı bulunamadı.`);
+      return {id:`music_ai_${Date.now()}_${i}`,question:q.question,choices,answer,explanation:q.explanation||"",sources,area:`AI Müzik · ${area}`};
     });
     startExam(qs,`AI Müzik · ${area}`);
   }catch(error){
