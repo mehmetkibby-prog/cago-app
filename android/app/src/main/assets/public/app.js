@@ -141,10 +141,12 @@ function startExam(qs,title){
   Object.assign(state,{exam:qs,index:0,correct:0,wrong:0,answered:false,examTitle:title,examResults:[],questionStartedAt:Date.now(),eliminatedChoices:{},eliminationMode:false,activeSavedTestId:null});renderQuestion();
 }
 function renderQuestion(){
+  cancelVoiceEngine();
   const q=state.exam[state.index],hard=ids("hardQuestions").has(q.id),pct=Math.round(state.index/state.exam.length*100),hasSolution=Boolean(q.explanation?.trim()),eliminated=eliminatedChoiceSet(q);
   setTitle(state.examTitle,`Soru ${state.index+1} / ${state.exam.length}`,true);
   app.innerHTML=`<div class="exam-head"><span class="pill">Doğru ${state.correct} · Yanlış ${state.wrong}</span><div class="exam-head-actions"><button class="secondary save-test-button" id="save-test">💾 Testi Kaydet</button><label class="hard-toggle"><input id="hard-check" type="checkbox" ${hard?"checked":""}> ★ Zor</label></div></div>
   <div class="progress"><i style="width:${pct}%"></i></div><div class="question">${esc(q.question)}</div>
+  ${questionVoiceButtonHtml()}
   ${choiceEliminationHtml()}
   <div>${Object.entries(q.choices).map(([k,v])=>`<button class="choice original-choice ${eliminated.has(k)?"eliminated":""}" data-key="${k}"><strong>${k}</strong><span>${esc(v)}</span></button>`).join("")}</div>
   ${hasSolution?`<div class="solution-actions"><button class="secondary solution-toggle" id="solution-toggle" aria-expanded="false">📖 Ayrıntılı Çözümü Göster</button></div><div class="solution-box hidden" id="solution-box"><b>Kitaptaki Ayrıntılı Çözüm</b><p>${esc(q.explanation)}</p></div>`:""}
@@ -154,6 +156,7 @@ function renderQuestion(){
   <div id="feedback"></div><div class="actions"><button class="primary hidden" id="next">${state.index===state.exam.length-1?"Sınavı Bitir":"Sonraki Soru"}</button></div>`;
   $("#hard-check").onchange=e=>toggleId("hardQuestions",q.id,e.target.checked,"Zor Sorular");
   $("#save-test").onclick=saveCurrentExam;
+  mountQuestionVoice(q);
   if(hasSolution)$("#solution-toggle").onclick=()=>{
     const box=$("#solution-box"),button=$("#solution-toggle"),opening=box.classList.contains("hidden");
     box.classList.toggle("hidden",!opening);button.setAttribute("aria-expanded",String(opening));
@@ -320,11 +323,13 @@ function simulationTime(){
 }
 function updateSimulationClock(){const el=$("#sim-clock");if(el)el.textContent=simulationTime()}
 function renderSimulationQuestion(){
+  cancelVoiceEngine();
   const s=state.simulation,q=s.questions[s.index],selected=s.answers[q.id],marked=s.marked.includes(q.id),eliminated=eliminatedChoiceSet(q);
   if(s.activeQuestionId!==q.id){s.activeQuestionId=q.id;s.questionEnteredAt=Date.now()}
   setTitle(s.title||"Gerçek Sınav",`Soru ${s.index+1} / ${s.questions.length}`,true);
   app.innerHTML=`<div class="simulation-bar"><b id="sim-clock">${simulationTime()}</b><span>${Object.keys(s.answers).length} cevaplandı · ${s.questions.length-Object.keys(s.answers).length} boş</span><button class="secondary save-test-button" id="save-simulation">💾 Testi Kaydet</button></div>
   <div class="progress"><i style="width:${Math.round((s.index+1)/s.questions.length*100)}%"></i></div><div class="question">${esc(q.question)}</div>
+  ${questionVoiceButtonHtml()}
   ${choiceEliminationHtml()}
   <div>${Object.entries(q.choices).map(([k,v])=>`<button class="choice original-choice ${selected===k?"selected":""} ${eliminated.has(k)?"eliminated":""}" data-key="${k}"><strong>${k}</strong><span>${esc(v)}</span></button>`).join("")}</div>
   ${topicLessonHtml()}
@@ -336,6 +341,7 @@ function renderSimulationQuestion(){
   mountTopicLesson(q,{simulation:true});
   mountAiQuestionSolution(q,{simulation:true,selectedAnswer:()=>s.answers[q.id]||""});
   mountSimilarQuestion(q);
+  mountQuestionVoice(q);
   mountChoiceElimination(q,key=>{s.answers[q.id]=key;renderSimulationQuestion()});
   $("#save-simulation").onclick=saveCurrentSimulation;
   $("#sim-mark").onchange=e=>{s.marked=e.target.checked?[...new Set([...s.marked,q.id])]:s.marked.filter(x=>x!==q.id);renderSimulationQuestion()};
@@ -1190,6 +1196,30 @@ function speakVoiceText(text,rate){
     };
     window.speechSynthesis.speak(utterance);
   });
+}
+function questionVoiceButtonHtml(){
+  return `<div class="question-voice-actions"><button class="secondary question-voice-button" id="question-voice" type="button">🔊 Sesli Soru</button></div>`;
+}
+function questionVoiceText(q){
+  const choices=Object.entries(q?.choices||{}).map(([key,value])=>`${key} şıkkı. ${value}.`).join(" ");
+  return `Soru. ${q?.question||""}. ${choices}`.replace(/\s+/g," ").trim();
+}
+function mountQuestionVoice(q){
+  const button=$("#question-voice");
+  if(!button)return;
+  button.onclick=async()=>{
+    button.disabled=true;
+    button.textContent="🔊 Okunuyor…";
+    try{
+      await cancelVoiceEngine();
+      await speakVoiceText(questionVoiceText(q),.88);
+    }catch(error){
+      toast(error?.message||"Soru sesli okunamadı.");
+    }finally{
+      const current=$("#question-voice");
+      if(current){current.disabled=false;current.textContent="🔊 Sesli Soru"}
+    }
+  };
 }
 async function startWrongVoiceLesson(text,startIndex=0){
   if(!canUseVoiceEngine())return toast("Bu cihazın sesli okuma motoru kullanılamıyor.");
