@@ -73,7 +73,7 @@ function offlineEducationSections(){return state.educationData?.sections||[]}
 function offlineEducationQuestions(){return offlineEducationSections().flatMap(s=>s.questions)}
 function allQuestions(){return [...state.data.sections.flatMap(s=>s.questions),...offlineEducationQuestions()]}
 function ids(key){return new Set(store.get(key,[]))}
-function setTitle(t,s="V26.7 AI Müzik ve Doğal Ses",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
+function setTitle(t,s="V26.8 Kaynak Doğrulamalı AI",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
 function nav(r){if(state.voiceLesson?.playing)stopWrongVoiceLesson(false);state.route=r;document.querySelectorAll("#bottom-nav button").forEach(b=>b.classList.toggle("active",b.dataset.route===r));({home:renderHome,wrong:renderWrong,stats:renderStats,voice:renderVoice,more:renderMore,settings:renderSettings}[r]||renderHome)()}
 
 function renderHome(){
@@ -86,7 +86,7 @@ function renderHome(){
     <button class="card feature" data-go="cards"><b>🗂 Ezber Kartları</b><span>Kart çevirerek tekrar et</span></button>
     <button class="card feature memory-feature" data-go="memory"><b>🧠 Yoğun Ezber Soruları</b><span>Eser–besteci, dönem ve ağır bilgi soruları</span></button>
     <button class="card feature offline-education-feature" data-go="offline-education"><b>📘 Eğitim Bilimleri</b><span>${offlineEducationQuestions().length} çevrimdışı soru · AI gerektirmez</span></button>
-    <button class="card feature education-feature" data-go="education"><b>🎓 AI Eğitim Bilimleri</b><span>7 alan, vaka, kuramcı ve zayıflık analizi</span></button>
+    <button class="card feature education-feature" data-go="education"><b>🎓 AI Eğitim Bilimleri</b><span>MEB, YÖK, üniversite ve akademik kaynak doğrulamalı</span></button>
     <button class="card feature music-ai-feature" data-go="music-ai"><b>🎼 AI Müzik Soru Oluşturucu</b><span>Tüm dönemler, Türk müziği, çalgılar, teori ve formlar</span></button>
     <button class="card feature music-report-feature" data-go="music-wrong-ai"><b>🧬 AI Müzik Yanlışları</b><span>Yanlışlarından kişisel özet ve yazdırılabilir PDF hazırla</span></button>
     <button class="card feature workbook-feature" data-go="workbook"><b>📕 Kişisel Çalışma Kitabı</b><span>Yanlışlarından konu özeti, etkinlik ve yazdırılabilir kitapçık</span></button>
@@ -535,7 +535,7 @@ function renderStudy(){
 function renderEducationCenter(){
   const stats=EDUCATION_AREAS.map(area=>({area,...educationAreaStats(area)}));
   setTitle("AI Eğitim Bilimleri Merkezi","7 alanlık kişisel çalışma merkezi",true);
-  app.innerHTML=`<section class="hero education-hero"><h2>AI Eğitim Bilimleri</h2><p>Felsefe ve sosyoloji hariç yedi ana alanda konu öğren, vaka sorusu çöz, kuramcıları ezberle ve zayıf alanlarını izle.</p></section>
+  app.innerHTML=`<section class="hero education-hero"><h2>AI Eğitim Bilimleri</h2><p>Felsefe ve sosyoloji hariç yedi ana alanda çalış. AI soruları MEB, YÖK, üniversiteler ve Türkçe akademik kaynakları tarayarak hazırlar.</p></section>
   <div class="education-dashboard">${stats.map(x=>`<button class="education-stat" data-area="${esc(x.area)}"><span>${esc(x.area)}</span><b>${x.score===null?"Yeni":`%${x.score}`}</b><small>${x.total?`${x.total} soru`:"Henüz çözülmedi"}</small><i><em style="width:${x.score||0}%"></em></i></button>`).join("")}</div>
   <div class="feature-grid education-tools">
     <button class="card feature" data-tool="lesson"><b>📖 AI Konu Anlatımı</b><span>Özet, sınavlık veya ayrıntılı anlatım</span></button>
@@ -613,6 +613,13 @@ function educationPrompt(groups,focus){
   const distribution=groups.map(x=>`${x.area}: ${x.count} soru`).join(", ");
   return `KPSS Eğitim Bilimleri düzeyinde toplam ${groups.reduce((n,x)=>n+x.count,0)} özgün, dört seçenekli soru üret. Dağılım: ${distribution}. Felsefe ve Sosyoloji dahil olmasın. Odak: ${focus}.
 
+Önce web taraması yap ve sorulardaki bilgileri güncel, güvenilir Türkçe kaynaklarla doğrula. Kaynak önceliği:
+1. MEB'in resmî mevzuat, öğretim programı, kılavuz ve yayınları (meb.gov.tr ve bağlı resmî MEB alan adları),
+2. YÖK ve YÖK Ulusal Tez Merkezi (yok.gov.tr, tez.yok.gov.tr),
+3. Türkiye'deki üniversitelerin resmî eğitim fakültesi, ders içeriği, açık ders ve akademik yayın sayfaları (.edu.tr),
+4. DergiPark ve TR Dizin'deki Türkçe hakemli akademik yayınlar.
+Blog, forum, sosyal medya, reklam/özet siteleri ve kaynağı belirsiz soru bankalarını bilgi kaynağı olarak kullanma. Mümkünse kritik bilgiyi iki bağımsız güvenilir kaynakla karşılaştır. Kaynaklar çelişirse soru üretme. Güncel mevzuat veya program sorularında mutlaka resmî MEB/YÖK kaynağını esas al. Kaynaklardaki soruları kopyalama; yalnız doğrulanmış bilgiden özgün soru yaz.
+
 Kurallar: kısa ve temiz Türkçe; tek kazanım; çoğunlukla doğrudan bilgi/kavram; vaka en fazla %30 ve 2-3 cümle; uzmanlık ayrıntısı, uzun öncül, çift olumsuzluk ve tartışmalı seçenek yok; tek kesin cevap; açıklama tek kısa cümle; kaynak soruyu birebir kopyalama.
 
 Yalnızca JSON döndür: {"questions":[{"area":"alan","question":"soru","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"tek kısa cümle"}]}`;
@@ -627,9 +634,9 @@ function splitEducationGroups(groups,size=7){
 }
 async function createEducationBatch(groups,focus){
   const expected=groups.reduce((n,x)=>n+x.count,0);
-  const raw=await openAIText(
+  const raw=await openAIWebText(
     educationPrompt(groups,focus),
-    "KPSS Eğitim Bilimleri için kısa, açık ve hatasız Türkçe test yaz. Yedi alan dışına çıkma. Tek kesin cevap kullan. Yalnızca JSON döndür.",
+    "Sen Türk Eğitim Bilimleri alanında çalışan titiz bir sınav uzmanısın. Her üretimde web araması yap; MEB, YÖK, Türkiye'deki üniversiteler ve Türkçe akademik yayınları önceliklendir. Güvenilir kaynakla doğrulanamayan veya kaynaklar arasında tartışmalı olan bilgiden soru yazma. Eğitim Felsefesi ve Eğitim Sosyolojisine girme. Yedi ana alan dışına çıkma. Kısa, açık Türkçe ve tek kesin cevap kullan. Yalnızca istenen JSON'u döndür.",
     {maxOutputTokens:Math.max(1200,expected*260)}
   );
   const parsed=parseJsonResponse(raw);
@@ -650,8 +657,8 @@ async function createEducationQuestionSet(groups,focus,onProgress=()=>{}){
   return results.flat().map((q,i)=>({id:`edu_${Date.now()}_${i}`,question:q.question,choices:q.choices,answer:q.answer,explanation:q.explanation,educationArea:q.area||groups[0].area}));
 }
 async function generateEducationQuestions(groups,focus,title,statusSelector,buttonSelector){
-  const status=$(statusSelector),button=$(buttonSelector);status.innerHTML='<div class="result">Hızlı üretim başladı…</div>';button.disabled=true;
-  try{const qs=await createEducationQuestionSet(groups,focus,(done,total)=>status.innerHTML=`<div class="result">Sorular hazırlanıyor · ${done}/${total} grup tamamlandı</div>`);startExam(shuffle(qs),title)}
+  const status=$(statusSelector),button=$(buttonSelector);status.innerHTML='<div class="result">MEB, YÖK, üniversite ve Türkçe akademik kaynaklar taranıyor…</div>';button.disabled=true;
+  try{const qs=await createEducationQuestionSet(groups,focus,(done,total)=>status.innerHTML=`<div class="result">Kaynaklar doğrulanıyor · ${done}/${total} grup tamamlandı</div>`);startExam(shuffle(qs),title)}
   catch(e){status.innerHTML=`<div class="result">Hata: ${esc(e.message)}</div>`;button.disabled=false}
 }
 function renderCustomExamBuilder(){
@@ -660,7 +667,7 @@ function renderCustomExamBuilder(){
   app.innerHTML=`<section class="hero custom-exam-hero"><h2>Kendi denemeni tasarla</h2><p>İstediğin müzik bölümlerinden ve Eğitim Bilimleri alanlarından istediğin kadar soru ekle. Seçimlerin tek sınavda karışık olarak birleşir.</p></section>
   <h3 class="section-title">Müzik Soru Bankası</h3><div class="builder-list">${state.data.sections.map(s=>`<label class="builder-row"><span><b>${esc(s.title)}</b><small>Bankada ${s.questions.length} soru</small></span><input class="builder-count" data-kind="local" data-id="${s.id}" type="number" min="0" max="${s.questions.length}" value="${Math.min(saved[`local:${s.id}`]||0,s.questions.length)}"></label>`).join("")}</div>
   <h3 class="section-title">Çevrimdışı Eğitim Bilimleri</h3><p class="muted">PDF’den aktarılan hazır sorular; AI veya internet gerekmez.</p><div class="builder-list">${offlineEducationSections().map(s=>`<label class="builder-row"><span><b>${esc(s.title)}</b><small>Bankada ${s.questions.length} soru</small></span><input class="builder-count" data-kind="offline-education" data-id="${s.id}" type="number" min="0" max="${s.questions.length}" value="${Math.min(saved[`offline-education:${s.id}`]||0,s.questions.length)}"></label>`).join("")}</div>
-  <h3 class="section-title">AI Eğitim Bilimleri</h3><p class="muted">Seçilen sorular sınav başlamadan önce AI tarafından hazırlanır.</p><div class="builder-list">${EDUCATION_AREAS.map(area=>`<label class="builder-row"><span><b>${esc(area)}</b><small>AI üretimi · Felsefe ve Sosyoloji hariç</small></span><input class="builder-count" data-kind="education" data-id="${esc(area)}" type="number" min="0" max="30" value="${saved[`education:${area}`]||0}"></label>`).join("")}</div>
+  <h3 class="section-title">AI Eğitim Bilimleri</h3><p class="muted">Seçilen sorular MEB, YÖK, üniversite ve Türkçe akademik kaynaklar taranarak hazırlanır.</p><div class="builder-list">${EDUCATION_AREAS.map(area=>`<label class="builder-row"><span><b>${esc(area)}</b><small>Kaynak doğrulamalı AI · Felsefe ve Sosyoloji hariç</small></span><input class="builder-count" data-kind="education" data-id="${esc(area)}" type="number" min="0" max="30" value="${saved[`education:${area}`]||0}"></label>`).join("")}</div>
   <div class="builder-summary"><span>Toplam soru</span><b id="builder-total">0</b></div>
   <div class="ai-control-grid"><div><label>Çözüm biçimi</label><select id="builder-mode"><option value="normal">Anında açıklamalı</option><option value="simulation">Sınav modu · geri bildirimsiz</option></select></div><div><label>Sınav süresi</label><select id="builder-minutes"><option>30</option><option selected>60</option><option>90</option><option>120</option></select></div></div>
   <div class="actions"><button class="secondary" id="builder-clear">Seçimleri Temizle</button><button class="primary" id="builder-start">Denemeyi Hazırla</button></div><div id="builder-status"></div>`;
@@ -1008,7 +1015,7 @@ async function buildTextPdf(title,text){
   for(let page=1;page<=pages;page++){
     pdf.setPage(page);pdf.setDrawColor(210,218,226);pdf.line(left,pageHeight-12,left+usableWidth,pageHeight-12);
     pdf.setFont("DejaVuSerif","normal");pdf.setFontSize(8);pdf.setTextColor(95,105,117);
-    pdf.text("Müzik Sınavı V26.7 · Kişisel çalışma çıktısı",left,pageHeight-8);
+    pdf.text("Müzik Sınavı V26.8 · Kişisel çalışma çıktısı",left,pageHeight-8);
     pdf.text(`${page} / ${pages}`,pageWidth-right,pageHeight-8,{align:"right"});
   }
   const arrayBuffer=pdf.output("arraybuffer");
