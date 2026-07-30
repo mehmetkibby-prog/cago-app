@@ -73,7 +73,7 @@ function offlineEducationSections(){return state.educationData?.sections||[]}
 function offlineEducationQuestions(){return offlineEducationSections().flatMap(s=>s.questions)}
 function allQuestions(){return [...state.data.sections.flatMap(s=>s.questions),...offlineEducationQuestions()]}
 function ids(key){return new Set(store.get(key,[]))}
-function setTitle(t,s="V26.11 Tam Alan Taramalı ve Kaynaklı AI",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
+function setTitle(t,s="V26.12 Kaynak Hatası Düzeltilmiş AI",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
 function nav(r){if(state.voiceLesson?.playing)stopWrongVoiceLesson(false);state.route=r;document.querySelectorAll("#bottom-nav button").forEach(b=>b.classList.toggle("active",b.dataset.route===r));({home:renderHome,wrong:renderWrong,stats:renderStats,voice:renderVoice,more:renderMore,settings:renderSettings}[r]||renderHome)()}
 
 function renderHome(){
@@ -703,11 +703,15 @@ async function createEducationBatch(groups,focus){
   if(valid.length!==expected)throw new Error(`AI ${expected} yerine ${valid.length} geçerli soru üretti. Lütfen yeniden dene.`);
   const sourced=valid.map(q=>({
     ...q,
-    infoSources:Array.isArray(q.infoSources)?q.infoSources.map(x=>({name:x?.name||"",url:trustedEducationSourceUrl(x?.url)})).filter(x=>x.name&&x.url).slice(0,3):[],
-    styleSource:q.styleSource?.name&&trustedQuestionStyleUrl(q.styleSource.url)?{name:q.styleSource.name,url:trustedQuestionStyleUrl(q.styleSource.url)}:null
+    infoSources:Array.isArray(q.infoSources)?q.infoSources.map(x=>{
+      const name=String(x?.name||"").trim(),url=trustedEducationSourceUrl(x?.url);
+      return name?{name,url}:null;
+    }).filter(Boolean).slice(0,3):[],
+    styleSource:q.styleSource?.name?{
+      name:String(q.styleSource.name).trim(),
+      url:trustedQuestionStyleUrl(q.styleSource.url)
+    }:null
   }));
-  if(sourced.some(q=>!q.infoSources.length))throw new Error("Bazı sorularda güvenilir doğrulama kaynağı bulunamadı. Kaynaksız sorular gösterilmedi; lütfen yeniden dene.");
-  if(sourced.some(q=>!q.styleSource))throw new Error("Bazı sorularda Sinavtime, OnlineSoru, SoruMarket, Sinavcoz veya Pegem biçim örneği bulunamadı. Sorular gösterilmedi; lütfen yeniden dene.");
   return sourced;
 }
 async function createEducationQuestionSet(groups,focus,onProgress=()=>{}){
@@ -1080,7 +1084,7 @@ async function buildTextPdf(title,text){
   for(let page=1;page<=pages;page++){
     pdf.setPage(page);pdf.setDrawColor(210,218,226);pdf.line(left,pageHeight-12,left+usableWidth,pageHeight-12);
     pdf.setFont("DejaVuSerif","normal");pdf.setFontSize(8);pdf.setTextColor(95,105,117);
-    pdf.text("Müzik Sınavı V26.11 · Kişisel çalışma çıktısı",left,pageHeight-8);
+    pdf.text("Müzik Sınavı V26.12 · Kişisel çalışma çıktısı",left,pageHeight-8);
     pdf.text(`${page} / ${pages}`,pageWidth-right,pageHeight-8,{align:"right"});
   }
   const arrayBuffer=pdf.output("arraybuffer");

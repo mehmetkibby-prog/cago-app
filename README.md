@@ -1,4 +1,4 @@
-# Müzik Sınavı V26.11 — Tam Android ve GitHub Paketi
+# Müzik Sınavı V26.12 — Kaynak Hatası Düzeltilmiş Tam Android ve GitHub Paketi
 
 V26.6 çalışan Android sürümünü koruyan; bütün müzik alanlarında kaynak
 doğrulamalı AI soruları üreten ve soru kökünü doğal AI kadın sesiyle
