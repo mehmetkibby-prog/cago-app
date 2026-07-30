@@ -1,6 +1,6 @@
 const $ = s => document.querySelector(s);
 const app = $("#app");
-const state = { data:null, educationData:null, route:"home", section:null, exam:[], index:0, correct:0, wrong:0, answered:false, examTitle:"", examResults:[], questionStartedAt:0, customExam:null, simulation:null, simulationTimer:null, rtc:null, voiceStream:null, voiceAudio:null, voiceChannel:null, voiceLesson:null, chat:[], studyChat:[], aiQuestionExplanations:{}, aiSimilarQuestions:{}, aiTopicLessons:{}, aiDistractorAnalyses:{}, eliminatedChoices:{}, eliminationMode:false, activeReport:null };
+const state = { data:null, educationData:null, route:"home", section:null, exam:[], index:0, correct:0, wrong:0, answered:false, examTitle:"", examResults:[], questionStartedAt:0, customExam:null, simulation:null, simulationTimer:null, rtc:null, voiceStream:null, voiceAudio:null, voiceChannel:null, voiceLesson:null, questionAudio:null, questionAudioUrl:"", questionVoiceCache:new Map(), chat:[], studyChat:[], aiQuestionExplanations:{}, aiSimilarQuestions:{}, aiTopicLessons:{}, aiDistractorAnalyses:{}, eliminatedChoices:{}, eliminationMode:false, activeReport:null };
 const store = {
   get(k,f){ try { return JSON.parse(localStorage.getItem(k)) ?? f; } catch { return f; } },
   set(k,v){ localStorage.setItem(k,JSON.stringify(v)); }
@@ -73,20 +73,21 @@ function offlineEducationSections(){return state.educationData?.sections||[]}
 function offlineEducationQuestions(){return offlineEducationSections().flatMap(s=>s.questions)}
 function allQuestions(){return [...state.data.sections.flatMap(s=>s.questions),...offlineEducationQuestions()]}
 function ids(key){return new Set(store.get(key,[]))}
-function setTitle(t,s="V26.4 Kişisel Akademi",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
+function setTitle(t,s="V26.7 AI Müzik ve Doğal Ses",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
 function nav(r){if(state.voiceLesson?.playing)stopWrongVoiceLesson(false);state.route=r;document.querySelectorAll("#bottom-nav button").forEach(b=>b.classList.toggle("active",b.dataset.route===r));({home:renderHome,wrong:renderWrong,stats:renderStats,voice:renderVoice,more:renderMore,settings:renderSettings}[r]||renderHome)()}
 
 function renderHome(){
   const p=store.get("profile",{name:"Çağlar",examDate:""});
   setTitle("Müzik Sınavı",p.name?`Hoş geldin, ${p.name}`:"V24 Android");
   app.innerHTML=`<section class="hero"><h2>Sınava hazırlan</h2><p>${allQuestions().length} soruluk bankadan çalış, yanlışlarını tekrar çöz ve gelişimini izle.</p>
-  <div class="actions"><button class="primary" id="mixed">Karışık Deneme</button><button class="secondary custom-exam-button" id="custom-exam">Özel Deneme Oluştur</button><button class="secondary" id="real-exam">Gerçek Sınav Simülasyonu</button><button class="secondary offline-education-button" id="offline-education">Eğitim Bilimleri</button><button class="secondary education-button" id="education-center">AI Eğitim Bilimleri Merkezi</button><button class="secondary" id="ai-exam">AI Eğitim Bilimleri</button><button class="secondary opera-ballet-button" id="opera-ballet">AI Opera ve Bale</button><button class="secondary ai-center-button" id="ai-center">AI Destekli Çalışma Merkezi</button></div></section>
+  <div class="actions"><button class="primary" id="mixed">Karışık Deneme</button><button class="secondary custom-exam-button" id="custom-exam">Özel Deneme Oluştur</button><button class="secondary" id="real-exam">Gerçek Sınav Simülasyonu</button><button class="secondary music-ai-button" id="music-ai">AI Müzik Soru Oluştur</button><button class="secondary offline-education-button" id="offline-education">Eğitim Bilimleri</button><button class="secondary education-button" id="education-center">AI Eğitim Bilimleri Merkezi</button><button class="secondary" id="ai-exam">AI Eğitim Bilimleri</button><button class="secondary opera-ballet-button" id="opera-ballet">AI Opera ve Bale</button><button class="secondary ai-center-button" id="ai-center">AI Destekli Çalışma Merkezi</button></div></section>
   <div class="feature-grid">
     <button class="card feature" data-go="teacher"><b>🤖 AI Öğretmen</b><span>Sor, öğren, mini sınav yap</span></button>
     <button class="card feature" data-go="cards"><b>🗂 Ezber Kartları</b><span>Kart çevirerek tekrar et</span></button>
     <button class="card feature memory-feature" data-go="memory"><b>🧠 Yoğun Ezber Soruları</b><span>Eser–besteci, dönem ve ağır bilgi soruları</span></button>
     <button class="card feature offline-education-feature" data-go="offline-education"><b>📘 Eğitim Bilimleri</b><span>${offlineEducationQuestions().length} çevrimdışı soru · AI gerektirmez</span></button>
     <button class="card feature education-feature" data-go="education"><b>🎓 AI Eğitim Bilimleri</b><span>7 alan, vaka, kuramcı ve zayıflık analizi</span></button>
+    <button class="card feature music-ai-feature" data-go="music-ai"><b>🎼 AI Müzik Soru Oluşturucu</b><span>Tüm dönemler, Türk müziği, çalgılar, teori ve formlar</span></button>
     <button class="card feature music-report-feature" data-go="music-wrong-ai"><b>🧬 AI Müzik Yanlışları</b><span>Yanlışlarından kişisel özet ve yazdırılabilir PDF hazırla</span></button>
     <button class="card feature workbook-feature" data-go="workbook"><b>📕 Kişisel Çalışma Kitabı</b><span>Yanlışlarından konu özeti, etkinlik ve yazdırılabilir kitapçık</span></button>
     <button class="card feature voice-lesson-feature" data-go="wrong-voice-lesson"><b>🎧 Yanlışlardan Sesli Ders</b><span>Not alma durakları ve ayarlanabilir konuşma hızı</span></button>
@@ -97,11 +98,12 @@ function renderHome(){
     <button class="card feature" data-go="profile"><b>👤 Kişisel Bilgi Köşesi</b><span>Hedeflerini düzenle</span></button>
   </div>
   <h3 class="section-title">Soru Bankası</h3><div class="grid">${state.data.sections.map(s=>`<button class="card section" data-id="${s.id}"><b>${esc(s.title)}</b><span class="pill">${s.questions.length} soru</span></button>`).join("")}</div>`;
-  $(".feature-grid").onclick=e=>{const b=e.target.closest("[data-go]");if(b)({teacher:renderTeacher,cards:renderFlashcards,memory:renderMemoryCenter,"offline-education":renderOfflineEducation,education:renderEducationCenter,"music-wrong-ai":renderMusicWrongAnalysis,workbook:renderPersonalWorkbook,"wrong-voice-lesson":renderWrongVoiceLesson,"forgetting-risk":renderForgettingRisk,"saved-tests":renderSavedTests,"custom-exam":renderCustomExamBuilder,study:renderStudy,profile:renderProfile}[b.dataset.go])()};
+  $(".feature-grid").onclick=e=>{const b=e.target.closest("[data-go]");if(b)({teacher:renderTeacher,cards:renderFlashcards,memory:renderMemoryCenter,"offline-education":renderOfflineEducation,education:renderEducationCenter,"music-ai":renderMusicQuestionGenerator,"music-wrong-ai":renderMusicWrongAnalysis,workbook:renderPersonalWorkbook,"wrong-voice-lesson":renderWrongVoiceLesson,"forgetting-risk":renderForgettingRisk,"saved-tests":renderSavedTests,"custom-exam":renderCustomExamBuilder,study:renderStudy,profile:renderProfile}[b.dataset.go])()};
   document.querySelectorAll(".section").forEach(b=>b.onclick=()=>renderSection(b.dataset.id));
   $("#mixed").onclick=()=>startExam(shuffle(allQuestions()).slice(0,Math.min(50,allQuestions().length)),"Karışık Deneme");
   $("#custom-exam").onclick=renderCustomExamBuilder;
   $("#real-exam").onclick=renderSimulationSetup;
+  $("#music-ai").onclick=renderMusicQuestionGenerator;
   $("#offline-education").onclick=renderOfflineEducation;
   $("#education-center").onclick=renderEducationCenter;
   $("#ai-exam").onclick=renderAiExam;
@@ -427,6 +429,7 @@ function renderMore(){
   <button class="card memory-feature" data-go="memory"><b>🧠 Yoğun Ezber Soruları</b></button>
   <button class="card simulation-feature" data-go="simulation"><b>⏱ Gerçek Sınav Simülasyonu</b></button>
   <button class="card opera-ballet-feature" data-go="opera-ballet"><b>🎭 AI Opera ve Bale</b></button>
+  <button class="card music-ai-feature" data-go="music-ai"><b>🎼 AI Müzik Soru Oluşturucu</b></button>
   <button class="card offline-education-feature" data-go="offline-education"><b>📘 Eğitim Bilimleri</b></button>
   <button class="card education-feature" data-go="education"><b>🎓 AI Eğitim Bilimleri Merkezi</b></button>
   <button class="card music-report-feature" data-go="music-wrong-ai"><b>🧬 AI Müzik Yanlışları</b></button>
@@ -437,7 +440,7 @@ function renderMore(){
   <button class="card custom-exam-feature" data-go="custom-exam"><b>🧩 Özel Deneme Oluştur</b></button>
   <button class="card" data-go="ai-center"><b>✨ AI Çalışma Merkezi</b></button><button class="card" data-go="study"><b>📚 Konu Çalışma</b></button>
   <button class="card" data-go="profile"><b>👤 Kişisel Bilgiler</b></button><button class="card" data-go="settings"><b>⚙ Ayarlar</b></button></div>`;
-  app.onclick=e=>{const b=e.target.closest("[data-go]");if(b)({hard:renderHard,cards:renderFlashcards,memory:renderMemoryCenter,simulation:renderSimulationSetup,"opera-ballet":renderOperaBallet,"offline-education":renderOfflineEducation,education:renderEducationCenter,"music-wrong-ai":renderMusicWrongAnalysis,workbook:renderPersonalWorkbook,"wrong-voice-lesson":renderWrongVoiceLesson,"forgetting-risk":renderForgettingRisk,"saved-tests":renderSavedTests,"custom-exam":renderCustomExamBuilder,"ai-center":renderAiStudyCenter,study:renderStudy,profile:renderProfile,settings:renderSettings}[b.dataset.go])()};
+  app.onclick=e=>{const b=e.target.closest("[data-go]");if(b)({hard:renderHard,cards:renderFlashcards,memory:renderMemoryCenter,simulation:renderSimulationSetup,"opera-ballet":renderOperaBallet,"music-ai":renderMusicQuestionGenerator,"offline-education":renderOfflineEducation,education:renderEducationCenter,"music-wrong-ai":renderMusicWrongAnalysis,workbook:renderPersonalWorkbook,"wrong-voice-lesson":renderWrongVoiceLesson,"forgetting-risk":renderForgettingRisk,"saved-tests":renderSavedTests,"custom-exam":renderCustomExamBuilder,"ai-center":renderAiStudyCenter,study:renderStudy,profile:renderProfile,settings:renderSettings}[b.dataset.go])()};
 }
 function renderFlashcards(){
   setTitle("Ezber Kartları","Dokun ve cevabı gör",true);const sections=state.data.sections;
@@ -608,21 +611,11 @@ function startWeakEducationStudy(){
 }
 function educationPrompt(groups,focus){
   const distribution=groups.map(x=>`${x.area}: ${x.count} soru`).join(", ");
-  return `ÖNCE WEB ARAMASI YAP, SONRA SORULARI ÜRET.
+  return `KPSS Eğitim Bilimleri düzeyinde toplam ${groups.reduce((n,x)=>n+x.count,0)} özgün, dört seçenekli soru üret. Dağılım: ${distribution}. Felsefe ve Sosyoloji dahil olmasın. Odak: ${focus}.
 
-Türkçe ve güvenilir kaynak önceliği:
-1. ÖSYM: osym.gov.tr üzerindeki sınav/kazanım ve örnek soru yaklaşımı,
-2. MEB: meb.gov.tr üzerindeki resmî öğretim, ölçme ve rehberlik içerikleri,
-3. Türk üniversiteleri: edu.tr uzantılı ders notları, açık ders malzemeleri ve fakülte yayınları,
-4. Akademik yayınlar: dergipark.org.tr, yok.gov.tr ve tubitak.gov.tr.
+Kurallar: kısa ve temiz Türkçe; tek kazanım; çoğunlukla doğrudan bilgi/kavram; vaka en fazla %30 ve 2-3 cümle; uzmanlık ayrıntısı, uzun öncül, çift olumsuzluk ve tartışmalı seçenek yok; tek kesin cevap; açıklama tek kısa cümle; kaynak soruyu birebir kopyalama.
 
-Seçilen alanların temel kavramlarını en az iki güvenilir Türkçe kaynaktan kontrol et. ÖSYM sorularını veya telifli kaynak sorularını kopyalama; yalnızca ölçme biçimi ve kazanım düzeyinden yararlan. Kaynaklar arasında uyuşmazlık varsa tartışmalı bilgiyi sorma. Kaynağı bulunamayan ayrıntıdan soru üretme.
-
-KPSS Eğitim Bilimleri düzeyinde toplam ${groups.reduce((n,x)=>n+x.count,0)} özgün, dört seçenekli soru üret. Dağılım: ${distribution}. Felsefe ve Sosyoloji dahil olmasın. Odak: ${focus}.
-
-Kurallar: kısa ve temiz Türkçe; tek kazanım; çoğunlukla doğrudan bilgi/kavram; vaka en fazla %30 ve 2-3 cümle; uzmanlık ayrıntısı, uzun öncül, çift olumsuzluk ve tartışmalı seçenek yok; tek kesin cevap; güçlü ve aynı kavram ailesinden çeldiriciler; açıklama kısa ve öğretici; kaynak soruyu birebir kopyalama.
-
-Yalnızca JSON döndür: {"questions":[{"area":"alan","question":"soru","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"doğru cevabı açıklayan kısa cümle","source":"yararlanılan kurum veya üniversite"}]}`;
+Yalnızca JSON döndür: {"questions":[{"area":"alan","question":"soru","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"tek kısa cümle"}]}`;
 }
 function splitEducationGroups(groups,size=7){
   const units=groups.flatMap(x=>Array.from({length:x.count},()=>x.area)),batches=[];
@@ -634,10 +627,10 @@ function splitEducationGroups(groups,size=7){
 }
 async function createEducationBatch(groups,focus){
   const expected=groups.reduce((n,x)=>n+x.count,0);
-  const raw=await openAIWebText(
+  const raw=await openAIText(
     educationPrompt(groups,focus),
-    "Sen Eğitim Bilimleri alanında çalışan uzman bir sınav öğretmeni ve akademik kaynak doğrulayıcısısın. Her istekte web araması yapmak zorundasın. Yalnız Türkçe resmî, üniversite ve akademik kaynaklardan doğruladığın bilgileri kullan. Yedi alan dışına çıkma. Tek kesin cevap kullan. ÖSYM veya başka kaynaklardaki soruları kopyalama. Yalnızca istenen JSON'u döndür.",
-    {maxOutputTokens:Math.max(1600,expected*320),educationResearch:true}
+    "KPSS Eğitim Bilimleri için kısa, açık ve hatasız Türkçe test yaz. Yedi alan dışına çıkma. Tek kesin cevap kullan. Yalnızca JSON döndür.",
+    {maxOutputTokens:Math.max(1200,expected*260)}
   );
   const parsed=parseJsonResponse(raw);
   if(!Array.isArray(parsed.questions)||!parsed.questions.length)throw new Error("Eğitim Bilimleri soruları oluşturulamadı.");
@@ -654,11 +647,11 @@ async function createEducationQuestionSet(groups,focus,onProgress=()=>{}){
     }
   }
   await Promise.all(Array.from({length:Math.min(3,batches.length)},worker));
-  return results.flat().map((q,i)=>({id:`edu_${Date.now()}_${i}`,question:q.question,choices:q.choices,answer:q.answer,explanation:q.source?`${q.explanation} Kaynak: ${q.source}.`:q.explanation,educationArea:q.area||groups[0].area}));
+  return results.flat().map((q,i)=>({id:`edu_${Date.now()}_${i}`,question:q.question,choices:q.choices,answer:q.answer,explanation:q.explanation,educationArea:q.area||groups[0].area}));
 }
 async function generateEducationQuestions(groups,focus,title,statusSelector,buttonSelector){
-  const status=$(statusSelector),button=$(buttonSelector);status.innerHTML='<div class="result">Türkçe üniversite, MEB, ÖSYM ve akademik kaynaklar araştırılıyor…</div>';button.disabled=true;
-  try{const qs=await createEducationQuestionSet(groups,focus,(done,total)=>status.innerHTML=`<div class="result">Kaynaklar doğrulandı, sorular hazırlanıyor · ${done}/${total} grup tamamlandı</div>`);startExam(shuffle(qs),title)}
+  const status=$(statusSelector),button=$(buttonSelector);status.innerHTML='<div class="result">Hızlı üretim başladı…</div>';button.disabled=true;
+  try{const qs=await createEducationQuestionSet(groups,focus,(done,total)=>status.innerHTML=`<div class="result">Sorular hazırlanıyor · ${done}/${total} grup tamamlandı</div>`);startExam(shuffle(qs),title)}
   catch(e){status.innerHTML=`<div class="result">Hata: ${esc(e.message)}</div>`;button.disabled=false}
 }
 function renderCustomExamBuilder(){
@@ -1015,7 +1008,7 @@ async function buildTextPdf(title,text){
   for(let page=1;page<=pages;page++){
     pdf.setPage(page);pdf.setDrawColor(210,218,226);pdf.line(left,pageHeight-12,left+usableWidth,pageHeight-12);
     pdf.setFont("DejaVuSerif","normal");pdf.setFontSize(8);pdf.setTextColor(95,105,117);
-    pdf.text("Müzik Sınavı V26.4 · Kişisel çalışma çıktısı",left,pageHeight-8);
+    pdf.text("Müzik Sınavı V26.7 · Kişisel çalışma çıktısı",left,pageHeight-8);
     pdf.text(`${page} / ${pages}`,pageWidth-right,pageHeight-8,{align:"right"});
   }
   const arrayBuffer=pdf.output("arraybuffer");
@@ -1185,6 +1178,11 @@ function canUseVoiceEngine(){
   return !!nativeTts()||("speechSynthesis" in window&&typeof window.SpeechSynthesisUtterance==="function");
 }
 async function cancelVoiceEngine(){
+  if(state.questionAudio){
+    state.questionAudio.pause();
+    state.questionAudio.currentTime=0;
+    state.questionAudio=null;
+  }
   const native=nativeTts();
   if(native){
     try{await native.stop()}catch(_){}
@@ -1208,27 +1206,76 @@ function speakVoiceText(text,rate){
   });
 }
 function questionVoiceButtonHtml(){
-  return `<div class="question-voice-actions"><button class="secondary question-voice-button" id="question-voice" type="button">🔊 Sesli Soru</button></div>`;
+  const rate=+store.get("questionVoiceRate",1);
+  return `<div class="question-voice-panel">
+    <div class="question-voice-actions"><button class="secondary question-voice-button" id="question-voice" type="button">🔊 AI Kadın Sesiyle Oku</button></div>
+    <label class="question-voice-rate"><span>Okuma hızı <b id="question-voice-rate-label">${rate.toFixed(2)}×</b></span><input id="question-voice-rate" type="range" min="0.65" max="1.40" step="0.05" value="${rate}"></label>
+    <small>Ses AI tarafından üretilir; yalnızca soru metni okunur.</small>
+  </div>`;
 }
 function questionVoiceText(q){
   return `Soru. ${q?.question||""}.`.replace(/\s+/g," ").trim();
 }
 function mountQuestionVoice(q){
-  const button=$("#question-voice");
+  const button=$("#question-voice"),rateInput=$("#question-voice-rate"),rateLabel=$("#question-voice-rate-label");
   if(!button)return;
+  rateInput.oninput=()=>{
+    const rate=+rateInput.value;
+    rateLabel.textContent=`${rate.toFixed(2)}×`;
+    store.set("questionVoiceRate",rate);
+    if(state.questionAudio)state.questionAudio.playbackRate=rate;
+  };
   button.onclick=async()=>{
     button.disabled=true;
-    button.textContent="🔊 Okunuyor…";
+    button.textContent="⏳ AI sesi hazırlanıyor…";
     try{
       await cancelVoiceEngine();
-      await speakVoiceText(questionVoiceText(q),.88);
+      await speakQuestionWithAI(questionVoiceText(q),+rateInput.value);
     }catch(error){
       toast(error?.message||"Soru sesli okunamadı.");
     }finally{
       const current=$("#question-voice");
-      if(current){current.disabled=false;current.textContent="🔊 Sesli Soru"}
+      if(current){current.disabled=false;current.textContent="🔊 AI Kadın Sesiyle Oku"}
     }
   };
+}
+async function speakQuestionWithAI(text,rate=1){
+  const key=store.get("apiKey","");
+  if(!key)throw new Error("AI sesi için önce Ayarlar bölümüne OpenAI API anahtarını gir.");
+  let url=state.questionVoiceCache.get(text);
+  if(!url){
+    const response=await fetch("https://api.openai.com/v1/audio/speech",{
+      method:"POST",
+      headers:{Authorization:`Bearer ${key}`,"Content-Type":"application/json"},
+      body:JSON.stringify({
+        model:"gpt-4o-mini-tts",
+        voice:"coral",
+        input:text,
+        instructions:"Türkçe konuşan doğal, sıcak ve anlaşılır bir kadın eğitimci sesiyle oku. Sınav sorusunu sakin ve net tonla seslendir."
+      })
+    });
+    if(!response.ok){
+      let message=`HTTP ${response.status}`;
+      try{message=(await response.json()).error?.message||message}catch(_){}
+      throw new Error(message);
+    }
+    url=URL.createObjectURL(await response.blob());
+    state.questionVoiceCache.set(text,url);
+    if(state.questionVoiceCache.size>20){
+      const oldest=state.questionVoiceCache.keys().next().value;
+      URL.revokeObjectURL(state.questionVoiceCache.get(oldest));
+      state.questionVoiceCache.delete(oldest);
+    }
+  }
+  const audio=new Audio(url);
+  audio.playbackRate=rate;
+  audio.preservesPitch=true;
+  state.questionAudio=audio;
+  return new Promise((resolve,reject)=>{
+    audio.onended=()=>{if(state.questionAudio===audio)state.questionAudio=null;resolve({stopped:false})};
+    audio.onerror=()=>{if(state.questionAudio===audio)state.questionAudio=null;reject(new Error("AI ses dosyası oynatılamadı."))};
+    audio.play().catch(error=>reject(new Error(error?.message||"Ses başlatılamadı.")));
+  });
 }
 async function startWrongVoiceLesson(text,startIndex=0){
   if(!canUseVoiceEngine())return toast("Bu cihazın sesli okuma motoru kullanılamıyor.");
@@ -1524,14 +1571,8 @@ function mountSimilarQuestion(q){
 }
 async function openAIWebText(input,instructions="",options={}){
   const key=store.get("apiKey","");if(!key)throw new Error("Önce Ayarlar bölümüne API anahtarını gir.");
-  const model=options.model||store.get("aiModel","gpt-4.1-mini");
-  const webTool=options.educationResearch?{
-    type:"web_search",
-    search_context_size:"high",
-    filters:{allowed_domains:["osym.gov.tr","meb.gov.tr","edu.tr","dergipark.org.tr","yok.gov.tr","tubitak.gov.tr"]}
-  }:{type:"web_search"};
-  const body={model,instructions,input,tools:[webTool],tool_choice:options.educationResearch?"required":"auto",max_output_tokens:options.maxOutputTokens||2400};
-  if(/^gpt-5/.test(model))body.reasoning={effort:"low"};
+  const model=options.model||store.get("aiModel","gpt-4.1-mini"),body={model,instructions,input,tools:[{type:"web_search"}],max_output_tokens:options.maxOutputTokens||2400};
+  if(/^gpt-5/.test(model))body.reasoning={effort:"minimal"};
   const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{Authorization:`Bearer ${key}`,"Content-Type":"application/json"},body:JSON.stringify(body)});
   if(!r.ok)throw new Error((await r.json()).error?.message||`HTTP ${r.status}`);const d=await r.json();return d.output_text||d.output?.flatMap(o=>o.content||[]).find(c=>c.type==="output_text")?.text||"Yanıt alınamadı.";
 }
@@ -1539,6 +1580,79 @@ function parseJsonResponse(text){
   const clean=String(text).replace(/```json|```/gi,"").trim(),start=clean.indexOf("{"),end=clean.lastIndexOf("}");
   if(start<0||end<start)throw new Error("AI geçerli soru verisi döndürmedi.");
   return JSON.parse(clean.slice(start,end+1));
+}
+const MUSIC_AI_AREAS=[
+  "Tüm Müzik Alanları",
+  "İlk Çağ ve Antik Dönem Müziği",
+  "Orta Çağ Müziği",
+  "Rönesans Dönemi Müziği",
+  "Barok Dönem Müziği",
+  "Rokoko ve Klasik Döneme Geçiş",
+  "Klasik Dönem Müziği",
+  "Romantik Dönem Müziği",
+  "20. Yüzyıl ve Çağdaş Müzik",
+  "Türk Müziği Tarihi",
+  "Geleneksel Türk Sanat Müziği",
+  "Türk Halk Müziği",
+  "Cumhuriyet Dönemi Türk Müziği ve Bestecileri",
+  "Çalgı Bilgisi ve Orkestrasyon",
+  "Müzik Teorisi, Armoni ve Akorlar",
+  "Müzik Biçimleri ve Türleri",
+  "Opera, Bale ve Sahne Müziği",
+  "Müzik Terimleri ve Gösterim",
+  "Müzik Eğitimi Yöntemleri"
+];
+function renderMusicQuestionGenerator(){
+  const savedArea=store.get("musicAiArea",MUSIC_AI_AREAS[0]),savedCount=+store.get("musicAiCount",10),savedLevel=store.get("musicAiLevel","Orta");
+  setTitle("AI Müzik Soru Oluşturucu","Güvenilir internet kaynaklarıyla",true);
+  app.innerHTML=`<section class="hero music-ai-hero"><h2>Bütün müzik alanlarından soru üret</h2><p>Seçtiğin konu önce güvenilir kaynaklardan araştırılır; bilgiler üniversite, konservatuvar, resmî kurum ve saygın müzik başvuru kaynaklarıyla doğrulanır.</p></section>
+  <label>Alan</label><select id="music-ai-area">${MUSIC_AI_AREAS.map(area=>`<option ${area===savedArea?"selected":""}>${esc(area)}</option>`).join("")}</select>
+  <div class="ai-control-grid"><div><label>Soru sayısı</label><select id="music-ai-count">${[5,10,15,20,25].map(n=>`<option value="${n}" ${n===savedCount?"selected":""}>${n}</option>`).join("")}</select></div>
+  <div><label>Zorluk</label><select id="music-ai-level">${["Kolay","Orta","Zor"].map(level=>`<option ${level===savedLevel?"selected":""}>${level}</option>`).join("")}</select></div></div>
+  <label class="check-row web-confirm"><input id="music-ai-source-check" type="checkbox" checked disabled><span>İnternetten araştır ve en az iki güvenilir kaynakla doğrula</span></label>
+  <p class="muted source-priority">Kaynak önceliği: üniversite ve konservatuvar yayınları, Kültür ve Turizm Bakanlığı, Devlet Opera ve Balesi, orkestralar, müzeler ve güvenilir müzik ansiklopedileri.</p>
+  <div class="actions"><button class="primary" id="music-ai-generate">Soruları Araştır ve Oluştur</button></div><div id="music-ai-status"></div>`;
+  $("#music-ai-generate").onclick=generateMusicAiExam;
+}
+async function generateMusicAiExam(){
+  const area=$("#music-ai-area").value,count=+$("#music-ai-count").value,level=$("#music-ai-level").value,status=$("#music-ai-status"),button=$("#music-ai-generate");
+  store.set("musicAiArea",area);store.set("musicAiCount",count);store.set("musicAiLevel",level);
+  status.innerHTML='<div class="result">Üniversite ve güvenilir kurum kaynakları araştırılıyor; sorular çapraz doğrulanıyor…</div>';
+  button.disabled=true;
+  const prompt=`${area} alanında, müzik öğretmenliği yazılı sınavına uygun ${level} düzeyde ${count} özgün dört seçenekli soru hazırla.
+
+Zorunlu araştırma ve doğrulama:
+- Her olguyu internetten araştır. Üniversitelerin müzik bölümleri/konservatuvarları, akademik veya resmî kurum yayınları ve güvenilir müzik ansiklopedilerini önceliklendir.
+- Türk müziğinde mümkünse İTÜ Türk Musikisi Devlet Konservatuvarı, devlet konservatuvarları, Kültür ve Turizm Bakanlığı, TRT ve akademik yayınları kullan.
+- Batı müziğinde üniversite/konservatuvar ders materyalleri, besteci veya kurum arşivleri, opera-orkestra-müze kaynakları ve güvenilir ansiklopediler kullan.
+- Her sorunun bilgisini en az iki bağımsız güvenilir kaynakla karşılaştır. Kaynaklar uyuşmuyorsa o bilgiden soru üretme.
+- Blog, forum, sosyal medya, reklam amaçlı test sitesi ve kaynaksız soru bankası kullanma.
+
+Soru kuralları:
+- Tek ve tartışmasız doğru cevap olsun. Çeldiriciler aynı türden ve makul olsun.
+- Ezbere değmeyecek aşırı ayrıntı, kesin gün/ay, tartışmalı ilkler ve belirsiz atıflar sorma.
+- Türkçe yazım ve özel adları kontrol et.
+- "Tüm Müzik Alanları" seçildiyse soruları dönemler, Türk müziği, çalgılar, teori/formlar ve sahne müziğine dengeli dağıt.
+- Açıklamada doğru cevabın nedenini 1-2 cümleyle belirt.
+
+Yalnızca şu JSON yapısını döndür:
+{"questions":[{"question":"...","choices":{"A":"...","B":"...","C":"...","D":"..."},"answer":"A","explanation":"...","sourceNames":["Kaynak 1","Kaynak 2"]}]}`;
+  const instructions="Sen müzikoloji ve müzik eğitimi alanında titiz bir sınav editörüsün. Web araştırması yap, üniversite ve birincil kurum kaynaklarına öncelik ver, yalnız doğrulanmış bilgiyle Türkçe test soruları yaz. Çıktıda JSON dışında hiçbir metin kullanma.";
+  try{
+    const text=await openAIWebText(prompt,instructions,{maxOutputTokens:Math.max(1800,count*300)});
+    const parsed=parseJsonResponse(text);
+    if(!Array.isArray(parsed.questions)||parsed.questions.length!==count)throw new Error(`AI ${count} yerine ${parsed.questions?.length||0} geçerli soru üretti. Yeniden dene.`);
+    const qs=parsed.questions.map((q,i)=>{
+      const choices=q.choices||{},answer=String(q.answer||"").toUpperCase();
+      if(!q.question||Object.keys(choices).length!==4||!choices[answer])throw new Error(`${i+1}. sorunun yapısı eksik geldi.`);
+      const sources=Array.isArray(q.sourceNames)?q.sourceNames.filter(Boolean).slice(0,3):[];
+      return {id:`music_ai_${Date.now()}_${i}`,question:q.question,choices,answer,explanation:`${q.explanation||""}${sources.length?`\nKaynak doğrulaması: ${sources.join("; ")}`:""}`,area:`AI Müzik · ${area}`};
+    });
+    startExam(qs,`AI Müzik · ${area}`);
+  }catch(error){
+    status.innerHTML=`<div class="result">Hata: ${esc(error.message)}</div>`;
+    button.disabled=false;
+  }
 }
 function renderOperaBallet(){
   setTitle("AI Opera ve Bale","İnternet destekli soru çözümü",true);

@@ -1,8 +1,8 @@
-# Müzik Sınavı V26.6 — Tam Android ve GitHub Paketi
+# Müzik Sınavı V26.7 — Tam Android ve GitHub Paketi
 
-V26.5 çalışan Android sürümünü koruyan ve “Sesli Soru” düğmesinde yalnızca
-soru kökünü okuyan, GitHub Actions üzerinden debug APK oluşturabilen eksiksiz
-Android projesidir.
+V26.6 çalışan Android sürümünü koruyan; bütün müzik alanlarında kaynak
+doğrulamalı AI soruları üreten ve soru kökünü doğal AI kadın sesiyle
+ayarlanabilir hızda okuyan eksiksiz Android projesidir.
 
 ## İçerik
 
@@ -10,7 +10,10 @@ Android projesidir.
 - A–D ve A–E cevap desteği
 - Zor Sorular listesi ve ayrı çözme modu
 - Cihazda kalıcı başarı geçmişi
-- Türkçe üniversite, MEB, ÖSYM ve akademik kaynak araştırmalı AI Eğitim Bilimleri denemesi
+- AI Eğitim Bilimleri denemesi
+- Tüm dönemler, Türk müziği, çalgılar, teori ve formlar için AI Müzik Soru Oluşturucu
+- Üniversite, konservatuvar ve güvenilir kurum kaynaklarını önceleyen web doğrulaması
+- Yalnız soru kökünü okuyan doğal AI kadın sesi ve 0,65×–1,40× hız ayarı
 - OpenAI Realtime AI Voice
 - Tablet ekranına uyumlu yatay/dikey arayüz
 
