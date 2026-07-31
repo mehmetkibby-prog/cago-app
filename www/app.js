@@ -65,6 +65,22 @@ function renderSavedTests(){
   document.querySelectorAll("[data-resume]").forEach(b=>b.onclick=()=>resumeSavedTest(b.dataset.resume));
   document.querySelectorAll("[data-delete]").forEach(b=>b.onclick=()=>removeSavedTest(b.dataset.delete));
 }
+function removeSavedLesson(id){
+  if(!confirm("Bu konu anlatımı kaydı silinsin mi?"))return;
+  store.set("savedTopicLessons",savedLessons().filter(x=>x.id!==id));renderLessonLibrary();
+}
+function renderLessonDetail(id){
+  const x=savedLessons().find(y=>y.id===id);if(!x)return renderLessonLibrary();
+  setTitle(x.title,x.area,true);app.innerHTML=`<article class="saved-lesson-detail"><div class="saved-lesson-meta"><span>${esc(x.area)}</span><span>${esc(x.kind)}</span><span>${new Date(x.createdAt).toLocaleString("tr-TR")}</span></div><h2>${esc(x.title)}</h2>${x.question?`<details><summary>Bağlı olduğu soruyu göster</summary><p>${esc(x.question)}</p></details>`:""}<div class="saved-lesson-text">${esc(x.text)}</div><div class="actions"><button class="secondary" id="edit-lesson-title">Başlığı Düzenle</button><button class="danger" id="delete-lesson">Kaydı Sil</button></div></article>`;
+  $("#edit-lesson-title").onclick=()=>{const title=prompt("Kayıt başlığı",x.title)?.trim();if(!title)return;const items=savedLessons(),item=items.find(y=>y.id===id);item.title=title;item.updatedAt=new Date().toISOString();store.set("savedTopicLessons",items);renderLessonDetail(id)};
+  $("#delete-lesson").onclick=()=>removeSavedLesson(id);
+}
+function renderLessonLibrary(){
+  const all=savedLessons();setTitle("Konu Anlatım Kayıt Merkezi",`${all.length} kayıt`,true);
+  app.innerHTML=`<section class="hero lesson-library-hero"><h2>Kaydettiğin anlatımlar</h2><p>Tam anlatımları ve seçtiğin önemli bölümleri burada bulabilirsin.</p></section><div class="lesson-library-toolbar"><input id="lesson-search" type="search" placeholder="Konu, alan veya kayıt içinde ara"><select id="lesson-area"><option value="">Tüm alanlar</option>${[...new Set(all.map(x=>x.area))].sort().map(x=>`<option>${esc(x)}</option>`).join("")}</select></div><div id="lesson-library-list"></div>`;
+  const draw=()=>{const q=$("#lesson-search").value.trim().toLocaleLowerCase("tr-TR"),area=$("#lesson-area").value,items=all.filter(x=>(!area||x.area===area)&&(!q||`${x.title} ${x.text} ${x.question} ${x.area}`.toLocaleLowerCase("tr-TR").includes(q)));$("#lesson-library-list").innerHTML=items.length?`<div class="saved-lesson-list">${items.map(x=>`<article class="saved-lesson-card" data-open-lesson="${x.id}"><div><small>${esc(x.area)} · ${esc(x.kind)}</small><h3>${esc(x.title)}</h3><p>${esc(x.text.slice(0,155))}${x.text.length>155?"…":""}</p><time>${new Date(x.createdAt).toLocaleString("tr-TR")}</time></div><button class="danger lesson-delete" data-delete-lesson="${x.id}">Sil</button></article>`).join("")}</div>`:`<section class="hero"><h2>${all.length?"Aramana uygun kayıt yok":"Henüz kayıt yok"}</h2><p>${all.length?"Başka bir kelime veya alan deneyebilirsin.":"Bir testte Konu Anlatımı'nı açıp tamamını ya da seçtiğin kısmı kaydet."}</p></section>`;document.querySelectorAll("[data-open-lesson]").forEach(e=>e.onclick=event=>{if(!event.target.closest("[data-delete-lesson]"))renderLessonDetail(e.dataset.openLesson)});document.querySelectorAll("[data-delete-lesson]").forEach(e=>e.onclick=event=>{event.stopPropagation();removeSavedLesson(e.dataset.deleteLesson)})};
+  $("#lesson-search").oninput=draw;$("#lesson-area").onchange=draw;draw();
+}
 if(!store.get("v24_4k_fast_model",false)){store.set("aiModel","gpt-4.1-mini");store.set("v24_4k_fast_model",true)}
 const esc = (t="") => String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const shuffle = xs => { const a=[...xs]; for(let i=a.length-1;i;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]} return a; };
@@ -73,7 +89,7 @@ function offlineEducationSections(){return state.educationData?.sections||[]}
 function offlineEducationQuestions(){return offlineEducationSections().flatMap(s=>s.questions)}
 function allQuestions(){return [...state.data.sections.flatMap(s=>s.questions),...offlineEducationQuestions()]}
 function ids(key){return new Set(store.get(key,[]))}
-function setTitle(t,s="V26.12 Kaynak Hatası Düzeltilmiş AI",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
+function setTitle(t,s="V26.13 Konu Anlatım Kayıt Merkezi",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
 function nav(r){if(state.voiceLesson?.playing)stopWrongVoiceLesson(false);state.route=r;document.querySelectorAll("#bottom-nav button").forEach(b=>b.classList.toggle("active",b.dataset.route===r));({home:renderHome,wrong:renderWrong,stats:renderStats,voice:renderVoice,more:renderMore,settings:renderSettings}[r]||renderHome)()}
 
 function renderHome(){
@@ -93,12 +109,13 @@ function renderHome(){
     <button class="card feature voice-lesson-feature" data-go="wrong-voice-lesson"><b>🎧 Yanlışlardan Sesli Ders</b><span>Not alma durakları ve ayarlanabilir konuşma hızı</span></button>
     <button class="card feature forgetting-feature" data-go="forgetting-risk"><b>⏳ Bugün Hatırlaman Gerekenler</b><span>Unutma riski yükselen bilgileri zamanında tekrar et</span></button>
     <button class="card feature saved-tests-feature" data-go="saved-tests"><b>💾 Kayıtlı Testler</b><span>Kaydettiğin testlere kaldığın yerden devam et</span></button>
+    <button class="card feature lesson-library-feature" data-go="lesson-library"><b>📚 Konu Anlatım Kayıt Merkezi</b><span>Tam veya seçili anlatımları sakla ve ara</span></button>
     <button class="card feature custom-exam-feature" data-go="custom-exam"><b>🧩 Deneme Oluşturucu</b><span>Bölümleri ve soru sayılarını kendin birleştir</span></button>
     <button class="card feature" data-go="study"><b>📚 Konu Çalışma Köşesi</b><span>Plan ve notlarını tut</span></button>
     <button class="card feature" data-go="profile"><b>👤 Kişisel Bilgi Köşesi</b><span>Hedeflerini düzenle</span></button>
   </div>
   <h3 class="section-title">Soru Bankası</h3><div class="grid">${state.data.sections.map(s=>`<button class="card section" data-id="${s.id}"><b>${esc(s.title)}</b><span class="pill">${s.questions.length} soru</span></button>`).join("")}</div>`;
-  $(".feature-grid").onclick=e=>{const b=e.target.closest("[data-go]");if(b)({teacher:renderTeacher,cards:renderFlashcards,memory:renderMemoryCenter,"offline-education":renderOfflineEducation,education:renderEducationCenter,"music-ai":renderMusicQuestionGenerator,"music-wrong-ai":renderMusicWrongAnalysis,workbook:renderPersonalWorkbook,"wrong-voice-lesson":renderWrongVoiceLesson,"forgetting-risk":renderForgettingRisk,"saved-tests":renderSavedTests,"custom-exam":renderCustomExamBuilder,study:renderStudy,profile:renderProfile}[b.dataset.go])()};
+  $(".feature-grid").onclick=e=>{const b=e.target.closest("[data-go]");if(b)({teacher:renderTeacher,cards:renderFlashcards,memory:renderMemoryCenter,"offline-education":renderOfflineEducation,education:renderEducationCenter,"music-ai":renderMusicQuestionGenerator,"music-wrong-ai":renderMusicWrongAnalysis,workbook:renderPersonalWorkbook,"wrong-voice-lesson":renderWrongVoiceLesson,"forgetting-risk":renderForgettingRisk,"saved-tests":renderSavedTests,"lesson-library":renderLessonLibrary,"custom-exam":renderCustomExamBuilder,study:renderStudy,profile:renderProfile}[b.dataset.go])()};
   document.querySelectorAll(".section").forEach(b=>b.onclick=()=>renderSection(b.dataset.id));
   $("#mixed").onclick=()=>startExam(shuffle(allQuestions()).slice(0,Math.min(50,allQuestions().length)),"Karışık Deneme");
   $("#custom-exam").onclick=renderCustomExamBuilder;
@@ -464,10 +481,11 @@ function renderMore(){
   <button class="card voice-lesson-feature" data-go="wrong-voice-lesson"><b>🎧 Yanlışlardan Sesli Ders</b></button>
   <button class="card forgetting-feature" data-go="forgetting-risk"><b>⏳ Unutma Riski Sistemi</b></button>
   <button class="card saved-tests-feature" data-go="saved-tests"><b>💾 Kayıtlı Testler</b></button>
+  <button class="card lesson-library-feature" data-go="lesson-library"><b>📚 Konu Anlatım Kayıt Merkezi</b></button>
   <button class="card custom-exam-feature" data-go="custom-exam"><b>🧩 Özel Deneme Oluştur</b></button>
   <button class="card" data-go="ai-center"><b>✨ AI Çalışma Merkezi</b></button><button class="card" data-go="study"><b>📚 Konu Çalışma</b></button>
   <button class="card" data-go="profile"><b>👤 Kişisel Bilgiler</b></button><button class="card" data-go="settings"><b>⚙ Ayarlar</b></button></div>`;
-  app.onclick=e=>{const b=e.target.closest("[data-go]");if(b)({hard:renderHard,cards:renderFlashcards,memory:renderMemoryCenter,simulation:renderSimulationSetup,"opera-ballet":renderOperaBallet,"music-ai":renderMusicQuestionGenerator,"offline-education":renderOfflineEducation,education:renderEducationCenter,"music-wrong-ai":renderMusicWrongAnalysis,workbook:renderPersonalWorkbook,"wrong-voice-lesson":renderWrongVoiceLesson,"forgetting-risk":renderForgettingRisk,"saved-tests":renderSavedTests,"custom-exam":renderCustomExamBuilder,"ai-center":renderAiStudyCenter,study:renderStudy,profile:renderProfile,settings:renderSettings}[b.dataset.go])()};
+  app.onclick=e=>{const b=e.target.closest("[data-go]");if(b)({hard:renderHard,cards:renderFlashcards,memory:renderMemoryCenter,simulation:renderSimulationSetup,"opera-ballet":renderOperaBallet,"music-ai":renderMusicQuestionGenerator,"offline-education":renderOfflineEducation,education:renderEducationCenter,"music-wrong-ai":renderMusicWrongAnalysis,workbook:renderPersonalWorkbook,"wrong-voice-lesson":renderWrongVoiceLesson,"forgetting-risk":renderForgettingRisk,"saved-tests":renderSavedTests,"lesson-library":renderLessonLibrary,"custom-exam":renderCustomExamBuilder,"ai-center":renderAiStudyCenter,study:renderStudy,profile:renderProfile,settings:renderSettings}[b.dataset.go])()};
 }
 function renderFlashcards(){
   setTitle("Ezber Kartları","Dokun ve cevabı gör",true);const sections=state.data.sections;
@@ -591,7 +609,7 @@ function renderEducationLesson(selected="Gelişim Psikolojisi"){
   $("#edu-teach").onclick=async()=>{
     const area=$("#edu-lesson-area").value,topic=$("#edu-lesson-topic").value.trim()||area,level=$("#edu-lesson-level").value,out=$("#edu-output");
     out.innerHTML='<div class="result">Ders hazırlanıyor…</div>';$("#edu-teach").disabled=true;
-    try{const text=await openAIText(`${area} alanında "${topic}" konusunu ${level} düzeyinde anlat. Şu sırayı kullan: temel açıklama, sınavda bilinmesi gerekenler, karıştırılan noktalar, hafıza tekniği, 3 kısa kontrol sorusu.`,"Sen yalnızca Eğitim Bilimleri alanında çalışan, kavramları doğru kullanan uzman bir sınav öğretmenisin. Eğitim Felsefesi ve Sosyolojisine girme. Türkçe ve sınav odaklı anlat.");out.innerHTML=`<div class="lesson-output">${esc(text)}</div>`}
+    try{const text=await openAIText(`${area} alanında "${topic}" konusunu ${level} düzeyinde anlat. Şu sırayı kullan: temel açıklama, sınavda bilinmesi gerekenler, karıştırılan noktalar, hafıza tekniği, 3 kısa kontrol sorusu.`,"Sen yalnızca Eğitim Bilimleri alanında çalışan, kavramları doğru kullanan uzman bir sınav öğretmenisin. Eğitim Felsefesi ve Sosyolojisine girme. Türkçe ve sınav odaklı anlat.");out.innerHTML=`<div class="lesson-output" id="standalone-lesson-content">${esc(text)}</div><div class="lesson-save-actions"><button class="primary" id="save-standalone-lesson">💾 Tamamını Kaydet</button><button class="secondary" id="save-standalone-selection">✂ Seçili Kısmı Kaydet</button></div><small class="selection-hint">Metinde istediğin kısmı seçerek ayrı kayıt oluşturabilirsin.</small>`;const content=$("#standalone-lesson-content");const remember=()=>{const s=window.getSelection();if(s&&s.toString().trim()&&s.anchorNode&&content.contains(s.anchorNode))content.dataset.lastSelection=s.toString().trim()};content.onmouseup=remember;content.ontouchend=()=>setTimeout(remember,80);$("#save-standalone-lesson").onclick=()=>saveLessonRecord({text,area,title:topic,kind:"Tam anlatım"});$("#save-standalone-selection").onclick=()=>{const selectedText=selectionInside(content);if(!selectedText)return toast("Önce anlatımdan kaydetmek istediğin kısmı seç.");saveLessonRecord({text:selectedText,area,title:topic,kind:"Seçili bölüm"});content.dataset.lastSelection=""}}
     catch(e){out.innerHTML=`<div class="result">Hata: ${esc(e.message)}</div>`}finally{$("#edu-teach").disabled=false}
   };
 }
@@ -791,7 +809,30 @@ async function openAIText(input,instructions="",options={}){
 }
 function topicLessonHtml(){
   return `<div class="topic-lesson-actions"><button class="secondary topic-lesson-button" id="topic-lesson-button" aria-expanded="false">📚 Konu Anlatımı</button></div>
-  <div class="topic-lesson-box hidden" id="topic-lesson-box" aria-live="polite"><b>Kısa Konu Anlatımı</b><div id="topic-lesson-content"></div></div>`;
+  <div class="topic-lesson-box hidden" id="topic-lesson-box" aria-live="polite"><b>Kısa Konu Anlatımı</b><div id="topic-lesson-content"></div><div class="lesson-save-actions hidden" id="topic-lesson-save-actions"><button class="primary" id="save-topic-lesson">💾 Tamamını Kaydet</button><button class="secondary" id="save-topic-selection">✂ Seçili Kısmı Kaydet</button></div><small class="selection-hint">İstediğin cümleleri basılı tutup seçtikten sonra “Seçili Kısmı Kaydet”e dokun.</small></div>`;
+}
+
+function savedLessons(){return store.get("savedTopicLessons",[]).filter(x=>x&&x.id&&x.text)}
+function lessonTitle(text,fallback="Konu Anlatımı"){
+  const first=String(text).split(/\n+/).map(x=>x.replace(/^(konu|temel açıklama)\s*:\s*/i,"").trim()).find(Boolean)||fallback;
+  return first.length>72?`${first.slice(0,69)}…`:first;
+}
+function saveLessonRecord({text,area="Genel",question="",kind="Tam anlatım",title=""}){
+  text=String(text||"").trim();if(!text)return toast("Kaydedilecek anlatım bulunamadı.");
+  const items=savedLessons(),now=new Date().toISOString();
+  items.unshift({id:`lesson-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,title:title||lessonTitle(text,area),text,area,question,kind,createdAt:now,updatedAt:now});
+  store.set("savedTopicLessons",items.slice(0,300));toast(kind==="Seçili bölüm"?"Seçtiğin bölüm kaydedildi":"Konu anlatımı kaydedildi");
+}
+function selectionInside(element){
+  const selected=element?.dataset.lastSelection||window.getSelection()?.toString()||"";return selected.trim();
+}
+function mountLessonSaveActions({content,area,question="",title=""}){
+  const all=$("#save-topic-lesson"),part=$("#save-topic-selection"),actions=$("#topic-lesson-save-actions");if(!all||!part||!content)return;
+  actions?.classList.remove("hidden");
+  const remember=()=>{const selection=window.getSelection();if(selection&&selection.toString().trim()&&selection.anchorNode&&content.contains(selection.anchorNode))content.dataset.lastSelection=selection.toString().trim()};
+  content.onmouseup=remember;content.ontouchend=()=>setTimeout(remember,80);
+  all.onclick=()=>saveLessonRecord({text:content.textContent,area,question,title,kind:"Tam anlatım"});
+  part.onclick=()=>{const text=selectionInside(content);if(!text)return toast("Önce anlatımdan kaydetmek istediğin kısmı seç.");saveLessonRecord({text,area,question,title,kind:"Seçili bölüm"});content.dataset.lastSelection=""};
 }
 function topicLessonPrompt(q){
   const choices=Object.entries(q.choices||{}).map(([key,value])=>`${key}) ${value}`).join("\n");
@@ -822,11 +863,11 @@ function mountTopicLesson(q,options={}){
     const shouldWarn=options.simulation||Boolean(options.warnBeforeReveal?.());
     if(shouldWarn&&!state.aiTopicLessons[cacheKey]&&!confirm("Konu anlatımı sorunun cevabına ilişkin ipucu verebilir. Devam etmek istiyor musun?"))return;
     box.classList.remove("hidden");button.setAttribute("aria-expanded","true");
-    if(state.aiTopicLessons[cacheKey]){content.textContent=state.aiTopicLessons[cacheKey];button.textContent="📕 Konu Anlatımını Gizle";return}
+    if(state.aiTopicLessons[cacheKey]){content.textContent=state.aiTopicLessons[cacheKey];button.textContent="📕 Konu Anlatımını Gizle";mountLessonSaveActions({content,area:questionAreaLabel(q),question:q.question});return}
     button.disabled=true;button.textContent="Konu hazırlanıyor…";content.textContent="AI bu sorunun bağlı olduğu konuyu belirliyor…";
     try{
       const lesson=await openAIText(topicLessonPrompt(q),"Sen deneyimli bir müzik ve Eğitim Bilimleri öğretmenisin. Tek sorudan hareketle konuyu kısa ders biçiminde, doğal Türkçe ve sınav odaklı anlat. Gereksiz giriş ve genel nasihat yazma.",{maxOutputTokens:850});
-      state.aiTopicLessons[cacheKey]=lesson;content.textContent=lesson;button.textContent="📕 Konu Anlatımını Gizle";
+      state.aiTopicLessons[cacheKey]=lesson;content.textContent=lesson;button.textContent="📕 Konu Anlatımını Gizle";mountLessonSaveActions({content,area:questionAreaLabel(q),question:q.question});
     }catch(error){content.textContent=`Hata: ${error.message}`;button.textContent="↻ Konu Anlatımını Yeniden Dene"}
     finally{button.disabled=false}
   };
