@@ -94,9 +94,6 @@ input[type=date]{width:100%;background:#0b182a;border:1px solid #294665;color:wh
 .topic-lesson-button:disabled,.distractor-lab-button:disabled{opacity:.7;cursor:wait}
 .topic-lesson-box{margin:12px 0 18px;padding:18px;border:1px solid #f59e0b;border-radius:16px;background:linear-gradient(145deg,#3b2911,#132b43);box-shadow:0 10px 30px #0004}
 .topic-lesson-box>b{display:block;color:#fcd34d;margin-bottom:9px}.topic-lesson-box div{white-space:pre-wrap;line-height:1.65}
-.lesson-save-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px;white-space:normal!important}.lesson-save-actions button{flex:1 1 175px}.selection-hint{display:block;margin-top:9px;color:#a8c5d9;line-height:1.45}.lesson-library-feature,.lesson-library-hero{border-color:#c084fc;background:linear-gradient(145deg,#3b1b57,#17334e)}
-.lesson-library-toolbar input[type=search]{width:100%;background:#0b182a;border:1px solid #294665;color:white;padding:14px;border-radius:13px}
-.lesson-library-toolbar{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin:0 0 18px}.saved-lesson-list{display:grid;gap:12px}.saved-lesson-card{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:17px;border:1px solid #315675;border-radius:16px;background:#0c2035;cursor:pointer}.saved-lesson-card h3{margin:5px 0 7px}.saved-lesson-card p{margin:0 0 8px;color:#c5d6e4;line-height:1.48}.saved-lesson-card small,.saved-lesson-card time,.saved-lesson-meta{color:#9fb7ca}.saved-lesson-detail{padding:20px;border:1px solid #315675;border-radius:18px;background:#0c2035}.saved-lesson-meta{display:flex;flex-wrap:wrap;gap:8px}.saved-lesson-meta span{padding:5px 9px;border-radius:999px;background:#183b57}.saved-lesson-detail details{margin:15px 0;padding:12px;border:1px solid #315675;border-radius:12px}.saved-lesson-text{white-space:pre-wrap;line-height:1.72;padding:18px 0}.lesson-delete{width:auto}
 .distractor-lab{margin-top:12px}.distractor-lab-button{width:100%;border:1px solid #fb7185;background:linear-gradient(135deg,#5a1f34,#253758)}
 .distractor-lab-box{margin-top:12px;padding:18px;border:1px solid #fb7185;border-radius:16px;background:linear-gradient(145deg,#421828,#132b43)}
 .distractor-lab-box>b{display:block;color:#fda4af;margin-bottom:9px}.distractor-lab-box div{white-space:pre-wrap;line-height:1.65}
@@ -136,9 +133,13 @@ input[type=date]{width:100%;background:#0b182a;border:1px solid #294665;color:wh
 .risk-card p{margin:12px 0;line-height:1.45}
 .risk-meter{height:6px;border-radius:99px;overflow:hidden;background:#071522;margin-bottom:8px}.risk-meter i{display:block;height:100%;background:linear-gradient(90deg,#34d399,#f59e0b,#fb7185)}
 .risk-card small{color:var(--muted)}
-@media(max-width:520px){.risk-summary{grid-template-columns:1fr 1fr 1fr}.risk-card-head{display:grid}.voice-lesson-controls{display:grid;grid-template-columns:1fr 1fr}.voice-lesson-controls button{min-width:0}.lesson-library-toolbar{grid-template-columns:1fr}.saved-lesson-card{grid-template-columns:1fr}.lesson-delete{width:100%}}
+@media(max-width:520px){.risk-summary{grid-template-columns:1fr 1fr 1fr}.risk-card-head{display:grid}.voice-lesson-controls{display:grid;grid-template-columns:1fr 1fr}.voice-lesson-controls button{min-width:0}}
 .music-ai-button,.music-ai-feature{border-color:#8b5cf6!important;background:linear-gradient(135deg,#24154a,#102743)!important}
 .music-ai-hero{background:linear-gradient(135deg,#281650,#0d2b47)}
+.khk-2025-button,.khk-2025-feature{border-color:#f59e0b!important;background:linear-gradient(135deg,#4a2608,#172c45)!important}
+.khk-2025-hero{border-color:#f59e0b;background:linear-gradient(135deg,#4d290b,#122c46)}
+.print-exam-note{margin:14px 0;padding:13px 15px;border:1px solid #38bdf8;border-radius:13px;background:linear-gradient(135deg,#0b2940,#10243a);color:#d9f3ff;line-height:1.45}
+.print-exam-button{border-color:#38bdf8!important;background:linear-gradient(135deg,#0d4564,#16314e)!important}
 .question-voice-panel{margin:12px 0 16px;padding:12px 14px;border:1px solid #315a7e;border-radius:15px;background:#0b1d30}
 .question-voice-actions{margin:0}.question-voice-button{width:100%}
 .question-voice-rate{display:grid;gap:7px;margin:11px 0 5px}.question-voice-rate span{display:flex;justify-content:space-between;color:#c7d8eb;font-size:13px}
