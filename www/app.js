@@ -73,7 +73,25 @@ function offlineEducationSections(){return state.educationData?.sections||[]}
 function offlineEducationQuestions(){return offlineEducationSections().flatMap(s=>s.questions)}
 function allQuestions(){return [...state.data.sections.flatMap(s=>s.questions),...offlineEducationQuestions()]}
 function ids(key){return new Set(store.get(key,[]))}
-function setTitle(t,s="V26.18 · Yazdırılabilir 2026 Denemesi",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
+function validQuestionSnapshot(q){return Boolean(q&&q.id&&q.question&&q.choices&&q.answer&&q.choices[q.answer])}
+function savedHardQuestions(){
+  const stored=store.get("hardQuestionItems",[]).filter(validQuestionSnapshot),byId=new Map(stored.map(q=>[q.id,q]));
+  const legacyIds=ids("hardQuestions");
+  allQuestions().forEach(q=>{if(legacyIds.has(q.id)&&!byId.has(q.id))byId.set(q.id,q)});
+  const items=[...byId.values()];
+  if(items.length!==stored.length)store.set("hardQuestionItems",items);
+  if(items.some(q=>!legacyIds.has(q.id)))store.set("hardQuestions",[...new Set([...legacyIds,...items.map(q=>q.id)])]);
+  return items;
+}
+function hardQuestionIds(){return new Set([...ids("hardQuestions"),...savedHardQuestions().map(q=>q.id)])}
+function toggleHardQuestion(q,on){
+  const item={...q,savedAsHardAt:new Date().toISOString()},items=savedHardQuestions(),at=items.findIndex(x=>x.id===q.id),idSet=hardQuestionIds();
+  if(on){if(at<0)items.unshift(item);else items[at]=item;idSet.add(q.id)}
+  else{if(at>=0)items.splice(at,1);idSet.delete(q.id)}
+  store.set("hardQuestionItems",items.slice(0,1000));store.set("hardQuestions",[...idSet]);
+  toast(on?"Soru Zor Sorular bölümüne kaydedildi":"Soru Zor Sorular bölümünden çıkarıldı");
+}
+function setTitle(t,s="V26.26 · Otomatik Tamamlayan 2026 Denemesi",back=false){$("#page-title").textContent=t;$("#subtitle").textContent=s;$("#back").classList.toggle("hidden",!back)}
 function nav(r){if(state.voiceLesson?.playing)stopWrongVoiceLesson(false);state.route=r;document.querySelectorAll("#bottom-nav button").forEach(b=>b.classList.toggle("active",b.dataset.route===r));({home:renderHome,wrong:renderWrong,stats:renderStats,voice:renderVoice,more:renderMore,settings:renderSettings}[r]||renderHome)()}
 
 function renderHome(){
@@ -157,7 +175,7 @@ function trustedQuestionStyleUrl(value){
   return trusted?href:"";
 }
 function questionSourcesHtml(q){
-  const sources=Array.isArray(q?.sources)?q.sources:[],style=q?.styleSource;
+  const sources=Array.isArray(q?.sources)?q.sources:(Array.isArray(q?.verificationSources)?q.verificationSources:[]),style=q?.styleSource;
   if(!sources.length&&!style)return "";
   const verified=sources.map(source=>{
     const name=esc(source.name||"Kaynak"),url=safeHttpUrl(source.url);
@@ -173,7 +191,7 @@ function startExam(qs,title){
 }
 function renderQuestion(){
   cancelVoiceEngine();
-  const q=state.exam[state.index],hard=ids("hardQuestions").has(q.id),pct=Math.round(state.index/state.exam.length*100),hasSolution=Boolean(q.explanation?.trim()),eliminated=eliminatedChoiceSet(q);
+  const q=state.exam[state.index],hard=hardQuestionIds().has(q.id),pct=Math.round(state.index/state.exam.length*100),hasSolution=Boolean(q.explanation?.trim()),eliminated=eliminatedChoiceSet(q);
   setTitle(state.examTitle,`Soru ${state.index+1} / ${state.exam.length}`,true);
   app.innerHTML=`<div class="exam-head"><span class="pill">Doğru ${state.correct} · Yanlış ${state.wrong}</span><div class="exam-head-actions"><button class="secondary save-test-button" id="save-test">💾 Testi Kaydet</button><label class="hard-toggle"><input id="hard-check" type="checkbox" ${hard?"checked":""}> ★ Zor</label></div></div>
   <div class="progress"><i style="width:${pct}%"></i></div><div class="question">${esc(q.question)}</div>
@@ -186,7 +204,7 @@ function renderQuestion(){
   ${aiQuestionSolutionHtml()}
   ${similarQuestionHtml()}
   <div id="feedback"></div><div class="actions"><button class="primary hidden" id="next">${state.index===state.exam.length-1?"Sınavı Bitir":"Sonraki Soru"}</button></div>`;
-  $("#hard-check").onchange=e=>toggleId("hardQuestions",q.id,e.target.checked,"Zor Sorular");
+  $("#hard-check").onchange=e=>toggleHardQuestion(q,e.target.checked);
   $("#save-test").onclick=saveCurrentExam;
   mountQuestionVoice(q);
   if(hasSolution)$("#solution-toggle").onclick=()=>{
@@ -239,7 +257,6 @@ function mountChoiceElimination(q,onSelect,options={}){
     button.classList.toggle("eliminated",eliminated.has(key));
   });
 }
-function toggleId(key,id,on,label){const s=ids(key);on?s.add(id):s.delete(id);store.set(key,[...s]);toast(on?`${label} bölümüne eklendi`:`${label} bölümünden çıkarıldı`)}
 function isEducationQuestion(q){return Boolean(q?.educationArea)}
 function wrongStoreKey(q){return isEducationQuestion(q)?"wrongEducationQuestions":"wrongMusicQuestions"}
 function savedWrongQuestions(key){return store.get(key,[]).filter(q=>q&&q.id&&q.question&&q.choices&&q.answer)}
@@ -444,11 +461,21 @@ function renderSavedWrongQuestions(title,key,button,empty){
   app.innerHTML=qs.length?`<section class="hero"><h2>${qs.length} soru</h2><p>Hazır olduğunda yeniden çöz.</p><div class="actions"><button class="primary" id="solve">${button}</button><button class="danger" id="clear">Listeyi Temizle</button></div></section><div class="list">${qs.map(q=>`<article class="list-item"><h3>${esc(q.question)}</h3><div class="muted">${esc(q.choices[q.answer])}</div></article>`).join("")}</div>`:`<section class="hero"><h2>Liste boş</h2><p>${empty}</p></section>`;
   if(qs.length){$("#solve").onclick=()=>startExam(shuffle(qs),title);$("#clear").onclick=()=>{if(confirm("Bu liste temizlensin mi?")){store.set(key,[]);renderWrongCategory(key)}}}
 }
-function renderHard(){renderSavedQuestions("Zor Sorular","hardQuestions","Zor Soruları Çöz","Yıldızla işaretlediğin sorular burada birikir.")}
-function renderSavedQuestions(title,key,button,empty){
-  setTitle(title,"Tekrar çalışma",false);const s=ids(key),qs=allQuestions().filter(q=>s.has(q.id));
-  app.innerHTML=qs.length?`<section class="hero"><h2>${qs.length} soru</h2><p>Hazır olduğunda yeniden çöz.</p><div class="actions"><button class="primary" id="solve">${button}</button><button class="danger" id="clear">Listeyi Temizle</button></div></section><div class="list">${qs.map(q=>`<article class="list-item"><h3>${esc(q.question)}</h3><div class="muted">${esc(q.choices[q.answer])}</div></article>`).join("")}</div>`:`<section class="hero"><h2>Liste boş</h2><p>${empty}</p></section>`;
-  if(qs.length){$("#solve").onclick=()=>startExam(shuffle(qs),title);$("#clear").onclick=()=>{if(confirm("Bu liste temizlensin mi?")){store.set(key,[]);renderSavedQuestions(title,key,button,empty)}}}
+function renderHard(){
+  const qs=savedHardQuestions(),savedCount=Math.min(qs.length,Math.max(1,+store.get("hardExamCount",Math.min(10,qs.length))||1));
+  setTitle("Zor Sorular",qs.length?`${qs.length} kayıtlı soru · test oluşturucu`:"Tekrar çalışma",true);
+  app.innerHTML=qs.length?`<section class="hero"><h2>${qs.length} zor soru kayıtlı</h2><p>Sabit bankadan veya AI tarafından üretilen soruların tamamı burada kalıcı tutulur. İçlerinden istediğin sayıda rastgele test oluşturabilirsin.</p>
+  <label>Testte kaç soru olsun? (1–${qs.length})</label><input id="hard-exam-count" type="number" min="1" max="${qs.length}" step="1" value="${savedCount}">
+  <div class="actions"><button class="primary" id="hard-build">Zor Sorulardan Test Oluştur</button><button class="secondary" id="hard-all">Tümünü Çöz</button><button class="danger" id="hard-clear">Listeyi Temizle</button></div><div id="hard-status"></div></section>
+  <div class="list">${qs.map(q=>`<article class="list-item"><h3>${esc(q.question)}</h3><div class="muted">${esc(q.choices[q.answer])}</div></article>`).join("")}</div>`:`<section class="hero"><h2>Liste boş</h2><p>Bir soruyu çözerken “★ Zor” kutusunu işaretlediğinde soru, AI üretimi olsa bile burada kalıcı olarak görünür.</p></section>`;
+  if(!qs.length)return;
+  $("#hard-build").onclick=()=>{
+    const count=Math.round(+$("#hard-exam-count").value),status=$("#hard-status");
+    if(!Number.isFinite(count)||count<1||count>qs.length)return status.innerHTML=`<div class="result">Soru sayısını 1 ile ${qs.length} arasında yaz.</div>`;
+    store.set("hardExamCount",count);startExam(shuffle(qs).slice(0,count),`Zor Sorular Testi · ${count} Soru`);
+  };
+  $("#hard-all").onclick=()=>startExam(shuffle(qs),`Zor Sorular Testi · ${qs.length} Soru`);
+  $("#hard-clear").onclick=()=>{if(confirm("Zor Sorular listesinin tamamı temizlensin mi?")){store.set("hardQuestions",[]);store.set("hardQuestionItems",[]);renderHard()}};
 }
 function renderStats(){
   setTitle("Başarı Analizi","Son denemelerin");const h=store.get("history",[]);
@@ -787,12 +814,42 @@ function renderSettings(){
   setTitle("Ayarlar","AI ve uygulama",true);app.innerHTML=`<section class="hero"><h2>OpenAI ayarları</h2><p>API anahtarı yalnızca bu cihazda saklanır. Paylaşma veya ekran görüntüsünde gösterme.</p></section><label>OpenAI API anahtarı</label><input id="api-key" type="password" value="${esc(store.get("apiKey",""))}" placeholder="sk-..."><label>AI modeli</label><select id="ai-model">${modelOptions(selected)}</select><label>Realtime oturum sunucusu (önerilen)</label><input id="realtime-endpoint" type="text" value="${esc(store.get("realtimeEndpoint",""))}" placeholder="https://sunucun.com/session"><p class="muted">Boş bırakırsan Realtime bağlantısı cihazdaki API anahtarını kullanır. En güvenlisi kısa ömürlü oturum anahtarı veren kendi sunucunu kullanmaktır.</p><label>AI çalışma talimatı</label><textarea id="instructions">${esc(store.get("instructions","Türkçe konuş. Müzik ve eğitim bilimleri sınavına hazırlanan bir öğretmene kısa, doğru ve öğretici cevaplar ver. İstenirse birer birer soru sor ve cevabı açıklayarak değerlendir."))}</textarea><div class="actions"><button class="primary" id="save-settings">Kaydet</button></div>`;
   $("#save-settings").onclick=()=>{store.set("apiKey",$("#api-key").value.trim());store.set("aiModel",$("#ai-model").value);store.set("realtimeEndpoint",$("#realtime-endpoint").value.trim());store.set("instructions",$("#instructions").value.trim());toast("Ayarlar kaydedildi")};
 }
+function waitFor(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
+function responseOutputText(response){
+  if(response?.status==="incomplete")throw new Error("AI yanıtı tamamlanmadan kesildi. Otomatik olarak yeniden denenecek.");
+  const content=(response?.output||[]).flatMap(item=>item?.content||[]),refusal=content.find(item=>item?.type==="refusal")?.refusal;
+  if(refusal)throw new Error(`AI bu isteği yanıtlamadı: ${refusal}`);
+  const text=String(response?.output_text||content.filter(item=>item?.type==="output_text").map(item=>item.text||"").join("\n")).trim();
+  if(!text)throw new Error("AI boş yanıt döndürdü. Otomatik olarak yeniden denenecek.");
+  return text;
+}
+async function requestOpenAIResponse(body,key,options={}){
+  const timeoutMs=Math.max(50,+options.timeoutMs||60000),attempts=Math.max(1,+options.networkAttempts||1);let lastError;
+  for(let attempt=1;attempt<=attempts;attempt++){
+    const controller=typeof AbortController!=="undefined"?new AbortController():null;let timer;
+    try{
+      const request=(async()=>{
+        const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{Authorization:`Bearer ${key}`,"Content-Type":"application/json"},body:JSON.stringify(body),signal:controller?.signal});
+        let payload={};try{payload=await response.json()}catch{}
+        if(!response.ok){const error=new Error(payload?.error?.message||`OpenAI HTTP ${response.status}`);error.status=response.status;error.retryable=[408,409,429,500,502,503,504].includes(response.status);throw error}
+        return payload;
+      })();
+      const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller?.abort();const error=new Error(`AI araştırması ${Math.max(1,Math.round(timeoutMs/1000))} saniyede tamamlanamadı.`);error.retryable=true;reject(error)},timeoutMs)});
+      return await Promise.race([request,timeout]);
+    }catch(error){
+      if(error&&error.retryable===undefined&&!error.status)error.retryable=true;
+      lastError=error;
+      if(attempt>=attempts||error?.retryable===false||[400,401,403,404].includes(error?.status))throw error;
+      await waitFor(Math.min(3600,900*attempt+Math.floor(Math.random()*500)));
+    }finally{if(timer)clearTimeout(timer)}
+  }
+  throw lastError||new Error("OpenAI yanıtı alınamadı.");
+}
 async function openAIText(input,instructions="",options={}){
   const key=store.get("apiKey","");if(!key)throw new Error("Önce Ayarlar bölümüne API anahtarını gir.");
   const model=options.model||store.get("aiModel","gpt-4.1-mini"),body={model,instructions:instructions||store.get("instructions","Türkçe konuş ve öğretici ol."),input,max_output_tokens:options.maxOutputTokens||1800};
   if(/^gpt-5/.test(model))body.reasoning={effort:"minimal"};
-  const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{Authorization:`Bearer ${key}`,"Content-Type":"application/json"},body:JSON.stringify(body)});
-  if(!r.ok)throw new Error((await r.json()).error?.message||`HTTP ${r.status}`);const d=await r.json();return d.output_text||d.output?.flatMap(o=>o.content||[]).find(c=>c.type==="output_text")?.text||"Yanıt alınamadı.";
+  const response=await requestOpenAIResponse(body,key,{timeoutMs:options.timeoutMs||60000,networkAttempts:options.networkAttempts||1});return responseOutputText(response);
 }
 function topicLessonHtml(){
   return `<div class="topic-lesson-actions"><button class="secondary topic-lesson-button" id="topic-lesson-button" aria-expanded="false">📚 Konu Anlatımı</button></div>
@@ -1089,7 +1146,7 @@ async function buildTextPdf(title,text){
   for(let page=1;page<=pages;page++){
     pdf.setPage(page);pdf.setDrawColor(210,218,226);pdf.line(left,pageHeight-12,left+usableWidth,pageHeight-12);
     pdf.setFont("DejaVuSerif","normal");pdf.setFontSize(8);pdf.setTextColor(95,105,117);
-    pdf.text("Müzik Sınavı V26.12 · Kişisel çalışma çıktısı",left,pageHeight-8);
+    pdf.text("Müzik Sınavı V26.26 · Kişisel çalışma çıktısı",left,pageHeight-8);
     pdf.text(`${page} / ${pages}`,pageWidth-right,pageHeight-8,{align:"right"});
   }
   const arrayBuffer=pdf.output("arraybuffer");
@@ -1159,7 +1216,7 @@ async function buildPrintableExamPdf(title,questions){
   for(let page=1;page<=pages;page++){
     pdf.setPage(page);pdf.setDrawColor(205,214,224);pdf.line(left,pageHeight-11,left+width,pageHeight-11);
     pdf.setFont("DejaVuSerif","normal");pdf.setFontSize(7.5);pdf.setTextColor(91,102,116);
-    pdf.text("Müzik Sınavı V26.18 · 2026 gerçek sınav tarzı yazdırılabilir deneme",left,pageHeight-7);
+    pdf.text("Müzik Sınavı V26.26 · tekrarsız 2026 gerçek sınav tarzı deneme",left,pageHeight-7);
     pdf.text(`${page} / ${pages}`,pageWidth-right,pageHeight-7,{align:"right"});
   }
   const arrayBuffer=pdf.output("arraybuffer");
@@ -1720,12 +1777,11 @@ function mountSimilarQuestion(q){
 }
 async function openAIWebText(input,instructions="",options={}){
   const key=store.get("apiKey","");if(!key)throw new Error("Önce Ayarlar bölümüne API anahtarını gir.");
-  const model=options.model||store.get("aiModel","gpt-4.1-mini"),body={model,instructions,input,max_output_tokens:options.maxOutputTokens||2400};
-  if(options.webSearch!==false)body.tools=[{type:"web_search"}];
+  const model=options.model||store.get("aiModel","gpt-4.1-mini"),body={model,instructions,input,max_output_tokens:options.maxOutputTokens||2400},webEnabled=options.webSearch!==false;
+  if(webEnabled){body.tools=[{type:"web_search"}];if(options.requireWebSearch)body.tool_choice="required"}
   if(options.jsonSchema)body.text={format:{type:"json_schema",name:options.schemaName||"structured_response",strict:true,schema:options.jsonSchema}};
-  if(/^gpt-5/.test(model))body.reasoning={effort:"minimal"};
-  const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{Authorization:`Bearer ${key}`,"Content-Type":"application/json"},body:JSON.stringify(body)});
-  if(!r.ok)throw new Error((await r.json()).error?.message||`HTTP ${r.status}`);const d=await r.json();return d.output_text||d.output?.flatMap(o=>o.content||[]).find(c=>c.type==="output_text")?.text||"Yanıt alınamadı.";
+  if(/^gpt-5/.test(model))body.reasoning={effort:options.reasoningEffort||(webEnabled?"low":"minimal")};
+  const response=await requestOpenAIResponse(body,key,{timeoutMs:options.timeoutMs||(webEnabled?120000:60000),networkAttempts:options.networkAttempts||(webEnabled?2:1)});return responseOutputText(response);
 }
 function parseJsonResponse(text){
   const clean=String(text).replace(/```json|```/gi,"").trim(),start=clean.indexOf("{"),end=clean.lastIndexOf("}");
@@ -1833,91 +1889,313 @@ async function generateKhkMusic2025Exam(){
     startExam(shuffle(questions),`2025 Müzik Alanı Tarzı · ${count} Soru`);
   }catch(error){status.innerHTML=`<div class="result">Hata: ${esc(error.message)} Sorunsuz paketler korunmadığı için yeni deneme başlatılmadı; tekrar deneyebilirsin.</div>`;button.disabled=false}
 }
-const REAL_2026_BLUEPRINT=[
-  {area:"Müzik terimleri ve nüanslar",weight:12,seeds:"cantabile, poco a poco crescendo ve bunlara yakın tempo, nüans, ifade ve artikülasyon terimleri"},
-  {area:"Müzik algısı ve müzik psikolojisi",weight:5,seeds:"amusia ve yakın müziksel algı, işitme, ritim ve ezgi bozuklukları"},
-  {area:"Dönem, besteci ve eser",weight:16,seeds:"Barok, Klasik, Romantik, 20. yüzyıl; besteci-dönem, eser-besteci ve eser-dönem eşleştirmeleri"},
-  {area:"Türk halk müziği ve bağlama",weight:10,seeds:"cura, bağlama ailesi, şelpe tekniği, tezene ve yakın çalgı/çalım tekniği bilgileri"},
-  {area:"Türk müziği makam ve değiştirici işaretleri",weight:8,seeds:"Si için koma işaretleri, makam donanımı, dizi ve seyir; makamı tek işaretten kesinleştirme, tam donanım ver"},
-  {area:"Armoni tarihi ve müzik kuramı kaynakları",weight:6,seeds:"Rameau ve Traité de l’harmonie, armoni tarihindeki temel kuramcı ve kitaplar"},
-  {area:"Biçimler ve oda müziği toplulukları",weight:10,seeds:"hızlı-yavaş-hızlı konçerto planı, quintet/kentet ve diğer oda müziği toplulukları"},
-  {area:"Kıbrıs Türk müziği ve sahne eserleri",weight:7,seeds:"Arap Ali Destanı, Ali Hoca, Havva Tekin ve yakın KKTC besteci-eser bilgileri"},
-  {area:"Dünya müzik kültürleri",weight:6,seeds:"Japon Noh tiyatrosu ve farklı kültürlerin temel müzikli sahne gelenekleri"},
-  {area:"Opera, bale ve sahne sanatları",weight:7,seeds:"balenin beş temel ayak pozisyonu, temel bale terimleri, opera ve sahne müziği"}
+const REAL_2026_QUALITY=globalThis.Real2026Quality;
+if(!REAL_2026_QUALITY)throw new Error("2026 çeşitlilik ve doğrulama motoru yüklenemedi.");
+const REAL_2026_HISTORY_KEY="real2026QuestionHistoryV2622";
+const REAL_2026_OLD_HISTORY_KEYS=["real2026QuestionHistoryV2621","real2026QuestionHistoryV2620"];
+const REAL_2026_HISTORY_LIMIT=600;
+const REAL_2026_COMPARISON_LIMIT=260;
+const REAL_2026_BATCH_SIZE=10;
+const REAL_2026_WORKERS=2;
+const REAL_2026_REQUEST_TIMEOUT_MS=45000;
+const REAL_2026_FOCUS_REASSIGN_LIMIT=6;
+const REAL_2026_DRAFT_KEY="real2026GenerationDraftV2625";
+const REAL_2026_ANGLES=[
+  {key:"definition-to-term",label:"tanımdan terimi bulma"},
+  {key:"term-to-feature",label:"terimden doğru özelliği bulma"},
+  {key:"matching",label:"doğru eşleştirmeyi bulma"},
+  {key:"incorrect-matching",label:"yanlış eşleştirmeyi ayırt etme"},
+  {key:"short-context",label:"kısa uygulama veya icra bağlamı"},
+  {key:"comparison",label:"yakın iki kavramı karşılaştırma"},
+  {key:"structure-sequence",label:"yapı, sıra veya oluşumu belirleme"},
+  {key:"work-person-period",label:"eser, kişi ve dönem bağlantısı"}
 ];
-function scaledReal2026Blueprint(total){
+const REAL_2026_BLUEPRINT=[
+  {area:"Müzik terimleri ve nüanslar",weight:12,focusBank:[
+    ["terms:cantabile","cantabile ve şarkı söyler gibi icra"],["terms:dolce","dolce ve yumuşak/tatlı ifade"],["terms:espressivo","espressivo ve anlatımlı icra"],["terms:legato-staccato","legato ile staccato ayrımı"],["terms:marcato-tenuto","marcato ile tenuto ayrımı"],["terms:accelerando","accelerando ve giderek hızlanma"],["terms:ritardando","ritardando ve giderek yavaşlama"],["terms:rallentando","rallentando ve tempo değişimi"],["terms:a-tempo","a tempo ile önceki hıza dönüş"],["terms:rubato","tempo rubato ve esnek zamanlama"],["terms:crescendo-diminuendo","crescendo ile diminuendo ayrımı"],["terms:poco-a-poco-crescendo","poco a poco crescendo ifadesinin bütünü"],["terms:subito-piano","subito piano ve ani gürlük değişimi"],["terms:morendo","morendo teriminin icra anlamı"],["terms:smorzando","smorzando teriminin icra anlamı"],["terms:fermata","fermata ve süre uzatma"],["terms:sostenuto","sostenuto ve sesleri tutarak icra"],["terms:con-brio","con brio ve canlı icra"],["terms:maestoso","maestoso ve görkemli icra"],["terms:agitato","agitato ve huzursuz/heyecanlı ifade"]
+  ]},
+  {area:"Müzik algısı ve müzik psikolojisi",weight:5,focusBank:[
+    ["perception:amusia-definition","amusia kavramının sınırları"],["perception:congenital-acquired-amusia","doğuştan ve edinilmiş amusia ayrımı"],["perception:pitch-rhythm","ezgi/perde ve ritim işleme bozukluklarının ayrımı"],["perception:beat-deafness","ritmik vuruş algısı güçlüğü"],["perception:musical-anhedonia","müzikal haz yitimi ile algı bozukluğu ayrımı"],["perception:auditory-agnosia","işitsel agnozi ile amusia ayrımı"],["perception:aphasia-amusia","afazi ile amusia ayrımı"],["perception:absolute-relative-pitch","mutlak ve bağıl işitme ayrımı"],["perception:musical-memory","müziksel bellek ve tanıma"],["perception:prosody-music","konuşma prozodisi ile müziksel algı ayrımı"]
+  ]},
+  {area:"Dönem, besteci ve eser",weight:16,focusBank:[
+    ["period:machaut-medieval","Guillaume de Machaut ve Orta Çağ"],["period:palestrina-renaissance","Palestrina ve Rönesans"],["period:monteverdi-transition","Monteverdi ve Rönesans-Barok geçişi"],["period:vivaIldi-four-seasons","Vivaldi ve Dört Mevsim"],["period:handel-messiah","Handel ve Messiah"],["period:bach-wtc","Bach ve Das Wohltemperierte Klavier"],["period:haydn-classical","Haydn ve Klasik dönem"],["period:mozart-classical","Mozart ve Klasik dönem"],["period:beethoven-transition","Beethoven ve Klasik-Romantik geçişi"],["period:schubert-romantic","Schubert ve erken Romantik dönem"],["period:berlioz-fantastique","Berlioz ve Symphonie fantastique"],["period:chopin-romantic","Chopin ve Romantik dönem"],["period:liszt-symphonic-poem","Liszt ve senfonik şiir"],["period:wagner-music-drama","Wagner ve müzikli drama"],["period:verdi-opera","Verdi ve 19. yüzyıl operası"],["period:tchaikovsky-romantic","Çaykovski ve Romantik dönem"],["period:brahms-romantic","Brahms ve Romantik dönem"],["period:mahler-late-romantic","Mahler ve geç Romantik dönem"],["period:debussy-modern","Debussy ve 20. yüzyıla geçiş"],["period:ravel-modern","Ravel ve 20. yüzyıl başı"],["period:stravinsky-rite","Stravinsky ve Bahar Ayini"],["period:schoenberg-twelve-tone","Schoenberg ve on iki ses tekniği"],["period:bartok-modern","Bartók ve 20. yüzyıl"],["period:shostakovich-modern","Şostakoviç ve 20. yüzyıl"],["period:cage-contemporary","John Cage ve deneysel müzik"],["period:ligeti-contemporary","Ligeti ve çağdaş müzik"],["period:minimalism","Steve Reich/Philip Glass ve minimalizm"]
+  ]},
+  {area:"Türk halk müziği ve bağlama",weight:10,focusBank:[
+    ["folk:cura","cura ve bağlama ailesindeki yeri"],["folk:divan-sazi","divan sazı ve bağlama ailesindeki yeri"],["folk:tambura-baglama","tambura ile bağlama boyut/ses ilişkisi"],["folk:meydan-sazi","meydan sazı ve bağlama ailesi"],["folk:cogur","çöğürün bağlama ailesindeki yeri"],["folk:selpe-definition","şelpe tekniğinin temel özelliği"],["folk:tezene","tezene/mızrap kullanımının özelliği"],["folk:baglama-duzeni","bağlama düzeninin tel sesleri ve adı"],["folk:bozuk-duzen","bozuk düzenin temel özelliği"],["folk:kopuz-baglama","kopuz ile bağlama arasındaki tarihsel ilişki"],["folk:kabak-kemane","kabak kemanenin çalgı ailesi ve icrası"],["folk:kaval","kavalın çalgı ailesi ve icrası"],["folk:zurna","zurnanın çalgı ailesi ve kullanım ortamı"],["folk:sipsi","sipsinin çalgı ailesi ve yöresel kullanımı"],["folk:tulum","tulumun çalgı ailesi ve yöresel kullanımı"],["folk:davul-zurna","davul-zurna birlikteliğinin icra işlevi"]
+  ]},
+  {area:"Türk müziği makam ve değiştirici işaretleri",weight:8,focusBank:[
+    ["makam:dizi-seyir","makam, dizi ve seyir kavramlarının ayrımı"],["makam:karar-guclu-yeden","karar, güçlü ve yeden görevleri"],["makam:notation-context","makam perdesinde notasyon/aktarım bağlamının belirtilmesi"],["makam:koma-signs","Türk müziği değiştirici işaretleri ve koma değerleri"],["makam:hicaz-tetrachord","Hicaz dörtlüsünün aralık yapısı"],["makam:ussak-tetrachord","Uşşak dörtlüsünün aralık yapısı"],["makam:rast-pentachord","Rast beşlisinin aralık yapısı"],["makam:huseyni-structure","Hüseyni makamında dizi ve seyir bilgisi"],["makam:nihavent-structure","Nihavent makamında dizi ve seyir bilgisi"],["makam:segah-pitch","Segâh perdesinin işlevi ve koma bağlamı"],["makam:hicaz-structure","Hicaz makamının tam dizi/karar/seyir bağlamı"],["makam:ussak-huseyni","Uşşak ile Hüseyni makamlarını ayıran belirgin özellik"],["makam:transposition","Türk müziğinde göçürme/transpozisyon"],["makam:full-equipment","tam donanımdan makam belirleme; karar ve güçlü bilgisiyle birlikte"]
+  ]},
+  {area:"Armoni tarihi ve müzik kuramı kaynakları",weight:6,focusBank:[
+    ["harmony:rameau-traite","Rameau ve Traité de l'harmonie'nin tarihsel bağlamı"],["harmony:fundamental-bass","Rameau'nun temel bas kavramı"],["harmony:zarlino","Zarlino ve Le istitutioni harmoniche"],["harmony:fux-gradus","Fux ve Gradus ad Parnassum"],["harmony:riemann-function","Hugo Riemann ve işlevsel armoni"],["harmony:schoenberg-harmonielehre","Schoenberg ve Harmonielehre"],["harmony:figured-bass","şifreli basın armoni uygulamasındaki işlevi"],["harmony:basso-continuo","basso continuo ve Barok armoni pratiği"],["harmony:species-counterpoint","tür kontrpuanı ve öğretim geleneği"],["harmony:triad-inversion","üçlü akor çevrimleri"],["harmony:cadence-functions","kadans ve tonal işlev ilişkisi"],["harmony:circle-fifths","beşliler çemberinin tonal ilişkilerde kullanımı"]
+  ]},
+  {area:"Biçimler ve oda müziği toplulukları",weight:10,focusBank:[
+    ["forms:duo","duo ve iki icracılı topluluk"],["forms:trio","trio ve üç icracılı topluluk"],["forms:string-quartet","yaylı çalgılar dörtlüsünün standart kadrosu"],["forms:quintet-five","quintet/kentet kavramı"],["forms:piano-quintet","piyano beşlisinin standart kadrosu"],["forms:sextet","sextet ve altı icracılı topluluk"],["forms:septet","septet ve yedi icracılı topluluk"],["forms:octet","octet ve sekiz icracılı topluluk"],["forms:concerto-cycle","Klasik konçertoda yaygın hızlı-yavaş-hızlı plan"],["forms:sonata-cycle","Klasik sonat döngüsünün bölüm düzeni"],["forms:rondo","rondo biçiminde ana temanın dönüşü"],["forms:minuet-trio","menuet-trio düzeni"],["forms:theme-variations","tema ve çeşitlemeler biçimi"],["forms:fugue","fügde konu ve taklit düzeni"],["forms:passacaglia-chaconne","pasakalya ile chaconne ilişkisi"],["forms:suite-dances","Barok süitte temel dansların sırası"],["forms:binary-ternary","iki ve üç bölmeli biçim ayrımı"],["forms:scherzo-trio","scherzo-trio yapısı"]
+  ]},
+  {area:"Kıbrıs Türk müziği ve sahne eserleri",weight:7,focusBank:[
+    ["cyprus:arap-ali-composer","Arap Ali Destanı'nın bestecisi"],["cyprus:arap-ali-libretto","Arap Ali Destanı'nın librettosu"],["cyprus:arap-ali-genre","Arap Ali Destanı'nın türü ve sahne eseri niteliği"],["cyprus:ali-hoca-work","Ali Hoca'nın doğrulanmış başka bir eseri"],["cyprus:composer-work","Kıbrıs Türk besteci-eser eşleştirmesi"],["cyprus:folk-song-source","Kıbrıs Türk halk ezgisi ve derleme kaynağı"],["cyprus:music-institution","Kıbrıs Türk müzik kurumu ve işlevi"],["cyprus:stage-history","Kıbrıs Türk sahne müziği tarihinden doğrulanmış olay"],["cyprus:choir-orchestra","Kıbrıs Türk koro/orkestra geleneğinden kurum"],["cyprus:artist-contribution","Kıbrıs Türk müziğinde kişi ve katkı eşleştirmesi"],["cyprus:instrument-practice","Kıbrıs Türk müziğinde doğrulanmış çalgı/icra pratiği"],["cyprus:publication-archive","Kıbrıs Türk müziği üzerine resmî/akademik yayın veya arşiv"]
+  ]},
+  {area:"Dünya müzik kültürleri",weight:6,focusBank:[
+    ["world:noh","Japon Noh tiyatrosunun temel özellikleri"],["world:kabuki-noh","Kabuki ile Noh ayrımı"],["world:gagaku","Japon saray müziği gagaku"],["world:gamelan","Endonezya gamelan topluluğu"],["world:wayang-kulit","wayang kulit ve müzik ilişkisi"],["world:hindustani-carnatic","Hindustani ve Karnatik geleneklerin ayrımı"],["world:chinese-opera","Çin operasında müzik ve sahne öğeleri"],["world:pansori","Kore pansori anlatı geleneği"],["world:flamenco","flamenkoda cante-toque-baile öğeleri"],["world:griot","Batı Afrika griot/jeli geleneği"],["world:arab-maqam","Arap makam geleneğinin temel kavramı"],["world:shakuhachi","Japon shakuhachi çalgısı ve geleneği"]
+  ]},
+  {area:"Opera, bale ve sahne sanatları",weight:7,focusBank:[
+    ["stage:ballet-five-positions","balenin beş temel ayak pozisyonu"],["stage:plie","plié hareketinin temel anlamı"],["stage:releve","relevé hareketinin temel anlamı"],["stage:arabesque","arabesque pozisyonunun temel özelliği"],["stage:pirouette","pirouette dönüşü"],["stage:pas-de-deux","pas de deux kavramı"],["stage:turnout","balede turnout/dışa dönüklük"],["stage:en-pointe","en pointe tekniği"],["stage:port-de-bras","port de bras ve kol hareketleri"],["stage:corps-de-ballet","corps de ballet topluluğu"],["stage:libretto","operada libretto"],["stage:aria-recitative","arya ile resitatif ayrımı"],["stage:overture","uvertürün sahne eserindeki işlevi"],["stage:leitmotif","leitmotif ve dramatik işlev"],["stage:grand-pas","grand pas de deux bölümleri"],["stage:opera-ensemble","operada solo, ansambl ve koro ayrımı"]
+  ]}
+].map(group=>({...group,focusBank:group.focusBank.map(([key,label])=>({key,label}))}));
+const REAL_2026_FACT_GUARDRAILS=`
+Kesin bilgi çıpaları:
+- Ritardando (rit.) tempoyu giderek/yavaş yavaş düşürmek, yani giderek yavaşlamaktır. “Çok hızlı yavaşlama”, “birden yavaşlama” veya bir gürlük terimi değildir.
+- Poco a poco “azar azar”; poco a poco crescendo ses gürlüğünü azar azar/giderek artırmaktır.
+- Divan sazı bağlama ailesinin büyük üyelerindendir ve bağlama ailesinin temel icrasında tezene/mızrap kullanılır. Şelpe ise tezene kullanmadan parmaklarla yapılan ayrı bir bağlama tekniğidir. Divan sazını ayırt eden doğru özellik olarak “parmakla çalınır” ifadesini kullanma.
+- Cura, bağlama ailesinin küçük üyesidir. Cantabile “şarkı söyler gibi”; amusia müziksel algı/tanıma yetisindeki bozukluktur.
+- Quintet/kentet beş icracı ya da beş çalgı için topluluk/eserdir. Klasik konçertonun yaygın üç bölüm sırası hızlı-yavaş-hızlıdır.
+- Noh, Japonya'nın geleneksel maskeli, müzik ve dans içeren tiyatro geleneğidir.
+- Rameau'nun Traité de l'harmonie eseri 1722 tarihlidir; bunu “dünyanın tartışmasız ilk armoni kitabı” diye genelleme, modern armoni kuramının temel ve ilk sistematik çalışmalarından biri olarak bağlamlandır.
+- Arap Ali Destanı'nın bestecisi Ali Hoca, librettosu Havva Tekin'dir.
+- Makamı yalnız tek bir koma işaretinden çıkartma; tam donanım, dizi veya karar-güçlü/seyir bilgisi vermeden makam sorusu kurma.
+- Rast makamının kararını, kullanılan notasyon/aktarım düzenini açıkça belirtmeden mutlak “Do notası” diye verme.
+- Oliver Sacks'i besteci veya amusia araştırmalarının tartışmasız ilk/temel bilim insanı gibi sunma; kişi rolünü kaynakta geçtiği biçimde doğru yaz.
+- Çeldiriciler de gerçek kişi, eser, terim veya çalgı olmalı; uydurma eser/terim kullanma.`;
+function real2026History(){return store.get(REAL_2026_HISTORY_KEY,[]).filter(item=>item&&item.question).slice(0,REAL_2026_HISTORY_LIMIT).map(item=>REAL_2026_QUALITY.makeRecord(item,item))}
+function writeReal2026History(records){
+  const seen=new Set(),unique=[];
+  for(const item of records){const record=REAL_2026_QUALITY.makeRecord(item,item),key=REAL_2026_QUALITY.compact(record.question)||REAL_2026_QUALITY.compact(`${record.targetEntity}|${record.testedFact}`);if(!key||seen.has(key))continue;seen.add(key);unique.push(record);if(unique.length>=REAL_2026_HISTORY_LIMIT)break}
+  store.set(REAL_2026_HISTORY_KEY,unique);
+}
+function migrateReal2026History(){
+  if(store.get("real2026HistoryMigratedV2622",false))return;
+  const recovered=REAL_2026_OLD_HISTORY_KEYS.flatMap(key=>store.get(key,[]))
+    .concat(savedTests().filter(test=>/2026 Gerçek Müzik Sınavı/i.test(test.title||"")).flatMap(test=>test.questions||[]))
+    .concat(store.get("hardQuestionItems",[]).filter(question=>/2026 Gerçek Sınav/i.test(question?.area||"")))
+    .map(question=>REAL_2026_QUALITY.makeRecord(question,{blueprintArea:String(question.area||"").replace(/^.*?·\s*/,"")}));
+  if(recovered.length)writeReal2026History([...recovered,...real2026History()]);
+  store.set("real2026HistoryMigratedV2622",true);
+}
+function real2026ComparisonHistory(){return [...real2026History().slice(0,REAL_2026_COMPARISON_LIMIT),...REAL_2026_QUALITY.referenceExclusions()]}
+function rememberReal2026Questions(questions,generationNo){
+  const now=new Date().toISOString(),records=questions.map(question=>REAL_2026_QUALITY.makeRecord(question,{generatedAt:now,generationNo}));
+  writeReal2026History([...records,...real2026History()]);
+}
+function real2026AvoidListForFocuses(focuses,history,limit=96){
+  const normalizedAreas=new Set(focuses.map(focus=>REAL_2026_QUALITY.normalize(focus.area))),seen=new Set();
+  return history.filter(item=>!item.blueprintArea||normalizedAreas.has(REAL_2026_QUALITY.normalize(item.blueprintArea))).filter(item=>{
+    const key=REAL_2026_QUALITY.normalize(`${item.targetEntity}|${item.testedFact}`);if(!key||seen.has(key))return false;seen.add(key);return true;
+  }).slice(0,limit).map(item=>`- Alan: ${item.blueprintArea||"önceki"} | ${item.focusKey||item.conceptFamily||"önceki"} | Hedef: ${item.targetEntity||"-"} | Ölçülen bilgi: ${item.testedFact||item.question}` ).join("\n")||"- Bu alanlarda kayıtlı önceki soru yok; yine de aynı paket içinde bilgi tekrarı yapma.";
+}
+function real2026CandidateSchema(count,focusKeys,angleKeys,verified=false){
+  const source={type:"object",additionalProperties:false,properties:{name:{type:"string"},url:{type:"string"}},required:["name","url"]};
+  const properties={question:{type:"string"},choices:{type:"object",additionalProperties:false,properties:{A:{type:"string"},B:{type:"string"},C:{type:"string"},D:{type:"string"},E:{type:"string"}},required:["A","B","C","D","E"]},answer:{type:"string",enum:["A","B","C","D","E"]},explanation:{type:"string"},topic:{type:"string"},difficulty:{type:"string",enum:["Kolay","Orta","Zor"]},focusKey:{type:"string",enum:focusKeys},angleKey:{type:"string",enum:angleKeys},conceptFamily:{type:"string"},targetEntity:{type:"string"},testedFact:{type:"string"}};
+  const required=["question","choices","answer","explanation","topic","difficulty","focusKey","angleKey","conceptFamily","targetEntity","testedFact"];
+  if(verified){properties.verificationSources={type:"array",items:source,minItems:2,maxItems:4};required.push("verificationSources")}
+  const question={type:"object",additionalProperties:false,properties,required};
+  return {type:"object",additionalProperties:false,properties:{questions:{type:"array",items:question,minItems:count,maxItems:count}},required:["questions"]};
+}
+function real2026NormalizedText(value){return String(value||"").toLocaleLowerCase("tr-TR").replace(/[’‘]/g,"'").replace(/\s+/g," ").trim()}
+function normalizeReal2026Question(q,job,index,i,requireSources=false){
+  const choices={},answer=String(q.answer||"").toUpperCase();
+  ["A","B","C","D","E"].forEach(key=>choices[key]=String(q.choices?.[key]||"").trim());
+  const focusKey=String(q.focusKey||"").trim(),expected=job.focuses.find(focus=>focus.key===focusKey);
+  const item={question:String(q.question||"").trim(),choices,answer,explanation:String(q.explanation||"").trim(),topic:String(q.topic||expected?.area||job.area||"2026 sınav profili").trim(),difficulty:q.difficulty,focusKey,angleKey:String(q.angleKey||"").trim(),conceptFamily:String(q.conceptFamily||"").trim(),targetEntity:String(q.targetEntity||"").trim(),testedFact:String(q.testedFact||"").trim(),blueprintArea:expected?.area||job.area||"2026 sınav profili",verificationSources:Array.isArray(q.verificationSources)?q.verificationSources.map(s=>({name:String(s?.name||"").trim(),url:String(s?.url||"").trim()})):[]};
+  validateReal2026Question(item,`${index+1}.${i+1}`,requireSources,expected);return item;
+}
+function validateReal2026Question(q,label,requireSources=false,expectedFocus=null){
+  const keys=["A","B","C","D","E"],root=real2026NormalizedText(q.question),correct=real2026NormalizedText(q.choices?.[q.answer]),explanation=real2026NormalizedText(q.explanation),combined=`${root} ${correct} ${explanation}`;
+  if(!q.question||!keys.every(key=>String(q.choices?.[key]||"").trim())||!keys.includes(q.answer)||!q.explanation)throw new Error(`${label} numaralı soru eksik.`);
+  if(new Set(keys.map(key=>real2026NormalizedText(q.choices[key]))).size!==5)throw new Error(`${label} numaralı soruda yinelenen seçenek var.`);
+  if(q.explanation.length<24)throw new Error(`${label} numaralı sorunun açıklaması doğrulama için yetersiz.`);
+  if(!expectedFocus||expectedFocus.angleKey!==q.angleKey)throw new Error(`${label} numaralı soru kendisine verilen özgün odak ve soru biçimini korumadı.`);
+  if(!q.conceptFamily||q.conceptFamily.length<4||!q.targetEntity||q.targetEntity.length<2||!q.testedFact||q.testedFact.length<12)throw new Error(`${label} numaralı sorunun anlam kimliği eksik.`);
+  const targetOverlap=REAL_2026_QUALITY.jaccard(q.targetEntity,combined),factOverlap=REAL_2026_QUALITY.jaccard(q.testedFact,`${correct} ${explanation}`),answerOverlap=REAL_2026_QUALITY.jaccard(correct,`${q.targetEntity} ${q.testedFact} ${explanation}`);
+  if(targetOverlap===0)throw new Error(`${label} numaralı sorunun hedef varlığı soru ve açıklamayla uyuşmuyor.`);
+  if(factOverlap<0.12)throw new Error(`${label} numaralı sorunun ölçülen bilgi kaydı açıklamayla uyuşmuyor.`);
+  if(answerOverlap===0)throw new Error(`${label} numaralı sorunun işaretli cevabı açıklamayla doğrulanamıyor.`);
+  const negative=/(değildir|yanlıştır|söylenemez|olamaz|değildir)/.test(root);
+  if(/ritardando|rit\./.test(root)&&!negative&&!/(yavaş|tempoyu düşür|gecik)/.test(`${correct} ${explanation}`))throw new Error(`${label} numaralı soruda ritardando tanımı hatalı.`);
+  if(/ritardando/.test(combined)&&/(çok hızlı yavaş|aniden yavaş|birden yavaş)/.test(`${correct} ${explanation}`))throw new Error(`${label} numaralı soruda ritardando ani veya çok hızlı yavaşlama diye tanımlanmış.`);
+  if(/poco a poco crescendo/.test(root)&&!negative&&(!/(azar azar|giderek|yavaş yavaş)/.test(`${correct} ${explanation}`)||!/(gür|ses şiddet|kuvvet)/.test(`${correct} ${explanation}`)))throw new Error(`${label} numaralı soruda poco a poco crescendo tanımı hatalı.`);
+  if(/divan sazı|divan bağlama/.test(root)&&!negative&&/(parmakla çal|şelpe)/.test(correct)&&!/(tezene|mızrap)/.test(correct))throw new Error(`${label} numaralı soruda Divan sazı parmakla çalınır diye doğru kabul edilmiş.`);
+  if(/divan sazı|divan bağlama/.test(explanation)&&/(parmakla çalınır|yalnız parmakla)/.test(explanation)&&!/(değil|yanlış)/.test(explanation))throw new Error(`${label} numaralı sorunun Divan sazı açıklaması hatalı.`);
+  if(/rast makamı/.test(combined)&&/(karar perdesi.{0,30}\bdo\b|\bdo\b.{0,30}karar perdesi)/.test(combined)&&!/(notasyon|aktarım|göçür|transpoz|yerinden|bolahenk)/.test(combined))throw new Error(`${label} numaralı soruda Rast makamı bağlamsız biçimde Do notasına sabitlendi.`);
+  if(/aşağıdaki bestecilerden/.test(root)&&/oliver sacks/.test(correct))throw new Error(`${label} numaralı soruda Oliver Sacks besteci gibi gösterildi.`);
+  if(/ilk armoni kitabı|dünyanın ilk.*armoni|tarihteki ilk.*armoni/.test(root)&&!/sistematik|modern armoni|bağlam/.test(combined))throw new Error(`${label} numaralı soruda tartışmalı “ilk armoni kitabı” genellemesi yapıldı.`);
+  if(requireSources){
+    const sourceAudit=REAL_2026_QUALITY.validateSources(q.verificationSources);
+    if(!sourceAudit.ok)throw new Error(`${label} numaralı sorunun kaynak denetimi geçmedi: ${sourceAudit.errors.join("; ")}`);
+    q.verificationSources=sourceAudit.sources;
+  }
+  return true;
+}
+function scaledReal2026Blueprint(total,history,generationNo){
   const weights=REAL_2026_BLUEPRINT.reduce((n,x)=>n+x.weight,0),raw=REAL_2026_BLUEPRINT.map(x=>({...x,count:Math.floor(total*x.weight/weights)}));
-  let left=total-raw.reduce((n,x)=>n+x.count,0),i=0;
-  while(left-->0)raw[i++%raw.length].count++;
-  return raw.filter(x=>x.count>0);
+  let left=total-raw.reduce((n,x)=>n+x.count,0),i=(generationNo*3+6)%raw.length;
+  while(left-->0){raw[i%raw.length].count++;i++}
+  let sequence=0;
+  return raw.filter(x=>x.count>0).map((group,groupIndex)=>{
+    const areaHistory=history.filter(item=>REAL_2026_QUALITY.normalize(item.blueprintArea)===REAL_2026_QUALITY.normalize(group.area));
+    const chosen=REAL_2026_QUALITY.selectLeastUsedFocuses(group.focusBank,group.count,areaHistory,generationNo+groupIndex*3);
+    const focuses=chosen.map(focus=>{const angle=REAL_2026_ANGLES[(generationNo+sequence+++groupIndex)%REAL_2026_ANGLES.length];return {...focus,area:group.area,angleKey:angle.key,angleLabel:angle.label}});
+    return {...group,focuses};
+  });
+}
+function buildReal2026Jobs(total,history,generationNo,batchSize=REAL_2026_BATCH_SIZE){
+  const plan=scaledReal2026Blueprint(total,history,generationNo).flatMap(group=>group.focuses).map((focus,planIndex)=>({...focus,planIndex})),jobs=[];
+  for(let at=0;at<plan.length;at+=batchSize){const focuses=plan.slice(at,at+batchSize);jobs.push({area:"Karma 2026 gerçek sınav profili",count:focuses.length,focuses,nonce:`${generationNo+1}-${jobs.length+1}-${Math.random().toString(36).slice(2,10)}`})}
+  return jobs;
+}
+function splitReal2026Job(job){
+  if(job.focuses.length<2)return [job];
+  const middle=Math.ceil(job.focuses.length/2);
+  return [job.focuses.slice(0,middle),job.focuses.slice(middle)].map((focuses,index)=>({...job,count:focuses.length,focuses,nonce:`${job.nonce}-s${index+1}-${Math.random().toString(36).slice(2,7)}`}));
+}
+function real2026ContentError(message){
+  const error=message instanceof Error?message:new Error(String(message));
+  error.real2026ContentFailure=true;
+  return error;
+}
+function real2026FocusAnchor(focus){
+  return REAL_2026_QUALITY.inferAnchor(`${focus?.key||""} ${focus?.label||""}`);
+}
+function reassignReal2026SingletonJob(job,priorRecords,reservedFocusKeys,reservedAnchors,reassignmentNo=0){
+  if(job.count!==1||job.focuses.length!==1)return null;
+  const current=job.focuses[0],group=REAL_2026_BLUEPRINT.find(item=>item.area===current.area);
+  if(!group)return null;
+  const records=(priorRecords||[]).map(item=>REAL_2026_QUALITY.makeRecord(item,item));
+  const usedKeys=new Set([...reservedFocusKeys,...records.map(item=>item.focusKey).filter(Boolean)]);
+  const usedAnchors=new Set([...reservedAnchors,...records.map(item=>item.anchor||REAL_2026_QUALITY.inferAnchor(`${item.question||""} ${item.targetEntity||""} ${item.testedFact||""}`)).filter(Boolean)]);
+  const available=group.focusBank.filter(focus=>{
+    if(usedKeys.has(focus.key))return false;
+    const anchor=real2026FocusAnchor(focus);
+    return !anchor||!usedAnchors.has(anchor);
+  });
+  if(!available.length)return null;
+  const rotation=(Number.isInteger(current.planIndex)?current.planIndex:0)+reassignmentNo+1;
+  const chosen=REAL_2026_QUALITY.selectLeastUsedFocuses(available,1,records,rotation)[0];
+  const currentAngle=Math.max(0,REAL_2026_ANGLES.findIndex(angle=>angle.key===current.angleKey));
+  const angle=REAL_2026_ANGLES[(currentAngle+reassignmentNo+1)%REAL_2026_ANGLES.length];
+  const replacement={...chosen,area:group.area,angleKey:angle.key,angleLabel:angle.label,planIndex:current.planIndex};
+  reservedFocusKeys.add(replacement.key);
+  const anchor=real2026FocusAnchor(replacement);if(anchor)reservedAnchors.add(anchor);
+  return {...job,count:1,focuses:[replacement],nonce:`${job.nonce}-f${reassignmentNo+1}-${Math.random().toString(36).slice(2,7)}`};
+}
+async function runReal2026Jobs(jobs,count,comparisonHistory,generateBatch,onProgress=()=>{},workerCount=REAL_2026_WORKERS,seedQuestions=[]){
+  const questionsByPlan=new Array(count),acceptedRecords=[];
+  seedQuestions.forEach(question=>{if(Number.isInteger(question?._planIndex)&&question._planIndex>=0&&question._planIndex<count&&!questionsByPlan[question._planIndex])questionsByPlan[question._planIndex]=question});
+  acceptedRecords.push(...questionsByPlan.filter(Boolean).map(question=>REAL_2026_QUALITY.makeRecord(question,question)));
+  const reservedFocusKeys=new Set(jobs.flatMap(job=>job.focuses).map(focus=>focus.key).filter(Boolean));
+  const reservedAnchors=new Set(jobs.flatMap(job=>job.focuses).map(real2026FocusAnchor).filter(Boolean));
+  let next=0,done=questionsByPlan.filter(Boolean).length,requestIndex=0;
+  const progress=(stage,extra={})=>onProgress({stage,done,count,...extra});
+  async function completeJob(originalJob,reassignmentDepth=0){
+    const missingFocuses=originalJob.focuses.filter(focus=>!questionsByPlan[focus.planIndex]);
+    if(!missingFocuses.length)return;
+    const job={...originalJob,count:missingFocuses.length,focuses:missingFocuses};
+    const maxAttempts=1;let lastError;
+    for(let attempt=1;attempt<=maxAttempts;attempt++){
+      const currentRequest=requestIndex++;progress("research",{job,attempt,maxAttempts});
+      try{
+        const prior=[...comparisonHistory,...acceptedRecords],batch=await generateBatch(job,currentRequest,Math.max(jobs.length,requestIndex),prior),audit=REAL_2026_QUALITY.auditNovelty(batch,[...comparisonHistory,...acceptedRecords]);
+        if(!audit.ok)throw real2026ContentError(`Paketler arası tekrar: ${audit.duplicates[0].reason}`);
+        batch.forEach(question=>{if(!Number.isInteger(question._planIndex)||questionsByPlan[question._planIndex])throw new Error("Soru planı aynı konuma iki kez yazılmaya çalışıldı.")});
+        acceptedRecords.push(...audit.records);batch.forEach(question=>{questionsByPlan[question._planIndex]=question});done+=batch.length;progress("accepted",{job,questions:questionsByPlan.filter(Boolean)});return;
+      }catch(error){lastError=error;if(error?.retryable===true&&attempt>=maxAttempts)throw error}
+    }
+    if(job.count>1){progress("split",{job});for(const part of splitReal2026Job(job))await completeJob(part);return}
+    if(lastError?.real2026ContentFailure===true&&reassignmentDepth<REAL_2026_FOCUS_REASSIGN_LIMIT){
+      const replacement=reassignReal2026SingletonJob(job,[...comparisonHistory,...acceptedRecords],reservedFocusKeys,reservedAnchors,reassignmentDepth);
+      if(replacement){progress("reassigned",{job,replacement,error:lastError,reassignment:reassignmentDepth+1});return completeJob(replacement,reassignmentDepth+1)}
+    }
+    throw lastError||new Error("Bir soru güvenilir biçimde üretilemedi.");
+  }
+  let failedJobs=[];
+  async function worker(){while(next<jobs.length){const job=jobs[next++];try{await completeJob(job)}catch(error){failedJobs.push({job,error})}}}
+  await Promise.all(Array.from({length:Math.min(workerCount,jobs.length)},worker));
+  for(let rescueRound=1;failedJobs.length&&rescueRound<=1;rescueRound++){
+    const rescue=failedJobs.flatMap(item=>item.job.count>1?splitReal2026Job(item.job):[item.job]).map(job=>({...job,nonce:`${job.nonce}-r${rescueRound}-${Math.random().toString(36).slice(2,7)}`}));
+    failedJobs=[];let rescueNext=0;
+    async function rescueWorker(){while(rescueNext<rescue.length){const job=rescue[rescueNext++];try{await completeJob(job)}catch(error){failedJobs.push({job,error})}}}
+    await Promise.all(Array.from({length:Math.min(workerCount,rescue.length)},rescueWorker));
+  }
+  if(failedJobs.length){const failure=failedJobs[0].error,error=failure instanceof Error?failure:new Error(String(failure||"Soru üretimi tamamlanamadı."));error.completed=done;error.questions=questionsByPlan.filter(Boolean);throw error}
+  const questions=questionsByPlan.filter(Boolean);if(questions.length!==count){const error=new Error(`${count} sorunun tamamı üretilemedi.`);error.completed=done;throw error}
+  return {questions,acceptedRecords,done,requestCount:requestIndex};
 }
 function renderRealMusic2026Generator(){
+  migrateReal2026History();
   const saved=+store.get("real2026Count",35);
   setTitle("2026 Gerçek Müzik Sınavı Tarzı","Hatırlanan gerçek soru türlerine göre",true);
-  app.innerHTML=`<section class="hero khk-2025-hero"><h2>2026 Gerçek Sınav Profilinden Yeni Sorular</h2><p>Bu bölüm sabit soruları göstermez. Sınavdan hatırladığın başlıklara dayanarak AI her denemede aynı kapsam, uzunluk ve zorlukta yeni sorular üretir.</p></section>
+  app.innerHTML=`<section class="hero khk-2025-hero"><h2>2026 Gerçek Sınav Profilinden Yeni Sorular</h2><p>Bu bölüm sabit soruları göstermez. Sınavdan hatırladığın başlıklara dayanarak AI aynı kapsam ve düzeyde, önceki denemelerden farklı sorular üretir.</p></section>
   <div class="result"><b>Temel alınan gerçek başlıklar:</b> cantabile, amusia, dönem–besteci–eser, cura, makam ve koma işaretleri, şelpe, armoni tarihi, hızlı–yavaş–hızlı biçim, quintet, Arap Ali Destanı, poco a poco crescendo, Noh ve bale pozisyonları.</div>
   <label>Kaç soru oluşturulsun? (5–100)</label><input id="real-2026-count" type="number" min="5" max="100" step="1" value="${Math.min(100,Math.max(5,saved))}">
   <label class="check-row"><input type="checkbox" checked disabled><span>Her soru A–E beş seçenekli, tek doğru cevaplı ve gerçek 2026 sınav üslubunda üretilecek</span></label>
+  <div class="print-exam-note"><b>↻ Tekrar önleme hafızası:</b> Son ${REAL_2026_COMPARISON_LIMIT} soru ile bu iki PDF'de saptanan tekrarlar karşılaştırılır. Aynı bilgi farklı cümleyle sorulsa bile reddedilir. Bu cihazda ${real2026History().length} yeni soru kayıtlı.</div>
+  <div class="print-exam-note"><b>⚡ Hızlı üretim:</b> 5–10 soru tek hızlı AI çağrısında hazırlanır. Daha büyük denemeler 10'ar soruluk az sayıda pakete ayrılır; üretim sırasında ağır web araması yapılmaz.</div>
+  <div class="print-exam-note"><b>🛡 Tamamlama koruması:</b> Geçen her paket cihazda taslak olarak saklanır. Uygulama kapanır veya bir çağrı hata verirse yeniden başlamak yerine eksik sorulardan devam eder.</div>
   <div class="print-exam-note"><b>🖨 Kalemle çözmek için:</b> Yazdırılabilir denemede sorular önce, cevap anahtarı ve kısa açıklamalar ayrı son sayfalarda hazırlanır.</div>
   <div class="actions"><button class="primary" id="real-2026-generate">Ekranda Deneme Oluştur</button><button class="secondary print-exam-button" id="real-2026-print">🖨 A4 PDF / Yazdır</button></div><div id="real-2026-status"></div>`;
   $("#real-2026-generate").onclick=()=>generateRealMusic2026Exam("screen");
   $("#real-2026-print").onclick=()=>generateRealMusic2026Exam("print");
 }
 function real2026Prompt(job,index,totalJobs){
-  return `2026 KKTC Müzik Öğretmenliği alan sınavından adayın hatırladığı soru türlerine çok benzeyen, fakat tamamen yeni ${job.count} adet beş seçenekli soru üret. Paket ${index+1}/${totalJobs}.
+  const focusPlan=job.focuses.map((focus,i)=>`${i+1}. Alan="${focus.area}" · focusKey="${focus.key}" · Odak: ${focus.label} · angleKey="${focus.angleKey}" · Soru biçimi: ${focus.angleLabel}`).join("\n");
+  return `2026 KKTC Müzik Öğretmenliği alan sınavından adayın hatırladığı kapsam ve zorluk profiline uygun, fakat önceki üretimlerde ölçülmemiş ${job.count} adet beş seçenekli soru hazırla. Araştırma paketi ${index+1}/${totalJobs}; çeşitlilik kodu: ${job.nonce}.
 
-Bu paketin alanı: ${job.area}
-Hatırlanan örnek kapsam: ${job.seeds}
+Zorunlu odak planı (her satır için tam bir soru ve satırdaki anahtarları aynen kullan):
+${focusPlan}
+
+YASAKLI ÖNCEKİ BİLGİLER — bunları aynı veya farklı cümleyle yeniden sorma; aynı hedef varlığı da seçme:
+${job.avoidList}
 
 Kurallar:
-- Hatırlanan soruları kelimesi kelimesine yeniden yazma. Aynı kazanımın komşu kavramlarını, farklı eser/bestecileri veya farklı tanım/eşleştirmeleri sor.
+- Her satır için yalnız kesin, temel ve tartışmasız bir olgu seç. Emin olmadığın, kaynağa göre değişen veya “ilk” iddiası taşıyan bilgiyi kullanma; aynı focusKey ve angleKey ile daha güvenli başka bir olgu seç.
+- URL veya verificationSources üretme. Bu hızlı üretim aşamasında web araması yapma; doğruluk aşağıdaki kesin bilgi çıpaları ve uygulamanın yerel denetimleriyle korunacaktır.
+- Yalnız soru kökünü değiştirmek yenilik değildir. Önceki sorudaki doğru cevap, hedef kişi/eser/terim ve ölçülen olgu değişmeden kalıyorsa o soru yasaktır.
+- Her odak için farklı bir hedef kişi, eser, terim, çalgı veya olgu seç. Paket içinde aynı doğru cevabı, hedef varlığı, bilgi veya soru kalıbını kullanma.
 - Soru kökleri gerçek sınavdaki gibi çoğunlukla kısa ve doğrudan, gerektiğinde orta uzunlukta olsun; akademik makale dili kullanma.
 - A, B, C, D, E olmak üzere beş güçlü seçenek ver. Çeldiriciler doğru cevapla aynı kavram ailesinden olsun.
 - Yaklaşık %35 kolay, %50 orta, %15 zor dağılımını koru. Gereksiz ayrıntı ve tartışmalı “ilk” bilgileri kullanma.
 - Makam sorusunda makamı belirlemeye yetecek tam donanım/dizi bilgisini yaz; yalnız bir koma işaretiyle belirsiz soru kurma.
 - Armoni tarihindeki ilk temel kuramsal eser sorularında Rameau'nun 1722 tarihli Traité de l’harmonie eserini doğru bağlamda kullan.
 - Arap Ali Destanı için besteci Ali Hoca, libretto Havva Tekin bilgisini karıştırma.
-- Her sorunun doğru cevabını ve 1-2 cümlelik öğretici açıklamasını ver. Aynı doğru cevabı veya kalıbı paket içinde tekrarlama.
-- Olgusal bilgileri güvenilir akademik veya resmî kaynaklarla doğrula; URL'yi çıktıya yazman gerekmiyor.
+- Her sorunun doğru cevabını ve 1-2 cümlelik öğretici açıklamasını ver. Açıklamada doğru seçenek açıkça anılsın ve neden doğru olduğu yazılsın.
+- conceptFamily alanına dar kavram ailesini, targetEntity alanına sorunun ölçtüğü en özel kişi/eser/terim/çalgıyı, testedFact alanına doğrulanan olguyu tek kısa cümleyle yaz. “Müzik”, “dönem” veya “terim” gibi geniş hedefler kullanma.
+- Olgusal bilgileri güvenilir akademik veya resmî kaynaklarla doğrula; emin olmadığın bilgiden soru üretme. Aşağıdaki bilgi çıpalarına kesinlikle uy:
+${REAL_2026_FACT_GUARDRAILS}
 
 Yalnız yapılandırılmış JSON döndür.`;
 }
-async function generateReal2026Batch(job,index,totalJobs){
-  let lastError;
-  for(let attempt=1;attempt<=2;attempt++)try{
-    const text=await openAIWebText(real2026Prompt(job,index,totalJobs),"Sen müzik öğretmenliği alan sınavlarını hazırlayan titiz bir akademik ölçme editörüsün. Adayın 2026 sınavından hatırladığı soru türlerini sınav profili olarak kullan; yeni, doğru, kısa, beş seçenekli ve güçlü çeldiricili sorular yaz. Bilgileri gerektiğinde web ile doğrula. Yalnız istenen JSON'u döndür.",{maxOutputTokens:Math.max(2200,job.count*330),jsonSchema:khk2025Schema(job.count),schemaName:`real_music_2026_${index+1}`});
+async function generateReal2026Batch(job,index,totalJobs,priorRecords){
+  const focusKeys=job.focuses.map(focus=>focus.key),angleKeys=[...new Set(job.focuses.map(focus=>focus.angleKey))];
+  const prompt=real2026Prompt({...job,avoidList:real2026AvoidListForFocuses(job.focuses,priorRecords)},index,totalJobs);
+  const text=await openAIWebText(prompt,"Sen KKTC müzik öğretmenliği alan sınavları için hızlı ve titiz bir soru editörüsün. Verilen odak planını aynen izle; yalnız kesin bildiğin, tartışmasız bilgileri kullan. Adayın hatırladığı 2026 soru türlerini kapsam ve zorluk profili olarak al; önceki doğru cevabı, hedef varlığı veya ölçülen bilgiyi tekrar etme. Gereksiz açıklama yapmadan yalnız istenen yapılandırılmış JSON'u döndür.",{model:"gpt-4.1-mini",maxOutputTokens:Math.max(2600,job.count*430),jsonSchema:real2026CandidateSchema(job.count,focusKeys,angleKeys,false),schemaName:`real_music_2026_fast_${index+1}_${Date.now()%100000}`,webSearch:false,reasoningEffort:"low",timeoutMs:REAL_2026_REQUEST_TIMEOUT_MS,networkAttempts:1});
+  try{
     const parsed=parseJsonResponse(text);
-    if(!Array.isArray(parsed.questions)||parsed.questions.length!==job.count)throw new Error("Paket eksik üretildi.");
-    return parsed.questions.map((q,i)=>{
-      const choices=q.choices||{},answer=String(q.answer||"").toUpperCase();
-      if(!q.question||Object.keys(choices).length!==5||!choices[answer]||!q.explanation)throw new Error(`${i+1}. soru eksik.`);
-      return {id:`real2026_${Date.now()}_${index}_${i}`,question:String(q.question).trim(),choices,answer,explanation:String(q.explanation).trim(),area:`2026 Gerçek Sınav Tarzı · ${q.topic||job.area}`,difficulty:q.difficulty,sourceLabel:"2026 sınavından hatırlanan soru türleri"};
-    });
-  }catch(error){lastError=error}
-  throw lastError||new Error("Soru paketi üretilemedi.");
+    if(!Array.isArray(parsed.questions)||parsed.questions.length!==job.count)throw new Error("Araştırma paketi eksik üretildi.");
+    const normalized=parsed.questions.map((q,i)=>normalizeReal2026Question(q,job,index,i,false)),byFocus=new Map(normalized.map(question=>[question.focusKey,question]));
+    if(byFocus.size!==job.count||job.focuses.some(focus=>!byFocus.has(focus.key)))throw new Error("Odak planındaki konuların tamamı birer kez kullanılmadı.");
+    const ordered=job.focuses.map(focus=>byFocus.get(focus.key)),audit=REAL_2026_QUALITY.auditNovelty(ordered,priorRecords);
+    if(!audit.ok)throw new Error(`Tekrar denetimi soruyu reddetti: ${audit.duplicates[0].reason}`);
+    return ordered.map((q,i)=>{const focus=job.focuses.find(item=>item.key===q.focusKey);return {id:`real2026_${Date.now()}_${index}_${i}_${Math.random().toString(36).slice(2,7)}`,question:q.question,choices:q.choices,answer:q.answer,explanation:q.explanation,area:`2026 Gerçek Sınav Tarzı · ${q.topic||q.blueprintArea}`,blueprintArea:q.blueprintArea,topic:q.topic,difficulty:q.difficulty,focusKey:q.focusKey,angleKey:q.angleKey,conceptFamily:q.conceptFamily,targetEntity:q.targetEntity,testedFact:q.testedFact,sources:[],verificationSources:[],sourceLabel:"Hızlı AI üretimi ve yerel doğruluk denetimi",_planIndex:focus.planIndex}});
+  }catch(error){throw real2026ContentError(error)}
 }
 async function generateRealMusic2026Exam(mode="screen"){
   const count=Math.round(+$("#real-2026-count").value),status=$("#real-2026-status"),button=$("#real-2026-generate"),printButton=$("#real-2026-print");
   if(!Number.isFinite(count)||count<5||count>100)return status.innerHTML='<div class="result">Soru sayısını 5 ile 100 arasında yaz.</div>';
-  store.set("real2026Count",count);button.disabled=true;printButton.disabled=true;
-  const jobs=[];scaledReal2026Blueprint(count).forEach(group=>{let left=group.count;while(left>0){const size=Math.min(7,left);jobs.push({...group,count:size});left-=size}});
-  const results=new Array(jobs.length);let next=0,done=0;
-  status.innerHTML=`<div class="result">2026 gerçek sınav profili uygulanıyor · 0/${count} soru</div>`;
-  async function worker(){while(next<jobs.length){const index=next++;results[index]=await generateReal2026Batch(jobs[index],index,jobs.length);done+=results[index].length;status.innerHTML=`<div class="result">Yeni sorular hazırlanıyor ve denetleniyor · ${done}/${count}</div>`}}
+  migrateReal2026History();store.set("real2026Count",count);button.disabled=true;printButton.disabled=true;
+  const generationNo=+store.get("real2026GenerationNo",0),comparisonHistory=real2026ComparisonHistory(),jobs=buildReal2026Jobs(count,comparisonHistory,generationNo),savedDraft=store.get(REAL_2026_DRAFT_KEY,null),seedQuestions=savedDraft?.count===count&&savedDraft?.generationNo===generationNo&&Array.isArray(savedDraft.questions)?savedDraft.questions:[];let completed=seedQuestions.length;
+  status.innerHTML=`<div class="result">${completed?`Kaydedilmiş taslaktan devam ediliyor · ${completed}/${count}`:`Hızlı üretim başlıyor · 0/${count}`}</div>`;
   try{
-    await Promise.all(Array.from({length:Math.min(3,jobs.length)},worker));
-    const questions=results.flat();
-    if(questions.length!==count)throw new Error(`${count} sorunun tamamı üretilemedi.`);
-    const normalized=new Set(questions.map(q=>q.question.toLocaleLowerCase("tr-TR").replace(/[^a-zçğıöşü0-9]/g,"")));
-    if(normalized.size!==questions.length)throw new Error("Tekrarlanan soru algılandı. Yeniden oluştur.");
-    const ordered=shuffle(questions),title=`2026 Gerçek Müzik Sınavı Tarzı · ${count} Soru`;
+    const production=await runReal2026Jobs(jobs,count,comparisonHistory,generateReal2026Batch,event=>{completed=event.done;if(event.stage==="research")status.innerHTML=`<div class="result">AI soruları hazırlıyor · ${event.done}/${count}${event.job.count?` · sıradaki ${event.job.count} soru`:""}</div>`;if(event.stage==="accepted"){store.set(REAL_2026_DRAFT_KEY,{count,generationNo,questions:event.questions});status.innerHTML=`<div class="result">Sorular kaydedildi · ${event.done}/${count}</div>`}if(event.stage==="split")status.innerHTML=`<div class="result">Eksik paket küçültüldü; kaydedilen ${event.done} soru korunarak devam ediliyor · ${event.done}/${count}</div>`;if(event.stage==="reassigned")status.innerHTML=`<div class="result">Tekrar eden soru atlandı; farklı konu seçildi · ${event.done}/${count}</div>`},REAL_2026_WORKERS,seedQuestions),questions=production.questions;completed=production.done;
+    const finalAudit=REAL_2026_QUALITY.auditNovelty(questions,comparisonHistory);
+    if(!finalAudit.ok)throw new Error(`Son çeşitlilik denetimi geçmedi: ${finalAudit.duplicates[0].reason}`);
+    const balanced=REAL_2026_QUALITY.balanceAnswers(questions,(generationNo+1)*100003+Date.now()%100000),ordered=shuffle(balanced),title=`2026 Gerçek Müzik Sınavı Tarzı · ${count} Soru`;
+    rememberReal2026Questions(ordered,generationNo+1);store.set("real2026GenerationNo",generationNo+1);store.set(REAL_2026_DRAFT_KEY,null);
     if(mode==="print"){
       status.innerHTML='<div class="result">Sorular tamamlandı. A4 PDF ve ayrı cevap anahtarı hazırlanıyor…</div>';
       await savePrintableExamPdf(title,ordered);
       status.innerHTML=`<div class="result"><b>${count} soruluk yazdırılabilir deneme hazır.</b> PDF'yi açıp Yazdır seçeneğiyle gerçek kalemle çözebilirsin.</div>`;
       button.disabled=false;printButton.disabled=false;
     }else startExam(ordered,title);
-  }catch(error){status.innerHTML=`<div class="result">Hata: ${esc(error.message)} Lütfen yeniden dene.</div>`;button.disabled=false;printButton.disabled=false}
+  }catch(error){completed=Number.isFinite(error?.completed)?error.completed:completed;if(Array.isArray(error?.questions)&&error.questions.length)store.set(REAL_2026_DRAFT_KEY,{count,generationNo,questions:error.questions});status.innerHTML=`<div class="result"><b>${completed}/${count} soru kaydedildi.</b> Hiçbiri silinmedi. Hata: ${esc(error.message)} Düğmeye yeniden bastığında yalnız eksik sorulardan devam edecek.</div>`;button.disabled=false;printButton.disabled=false}
 }
 function renderMusicQuestionGenerator(){
   const savedArea=store.get("musicAiArea",MUSIC_AI_AREAS[0]),savedCount=+store.get("musicAiCount",10),savedLevel=store.get("musicAiLevel","Orta");
@@ -2111,6 +2389,7 @@ function removeEfsaneRecords(){
   const isEfsane=q=>String(q?.id||"").startsWith("efsane-");
   store.set("wrongEducationQuestions",savedWrongQuestions("wrongEducationQuestions").filter(q=>!isEfsane(q)));
   store.set("hardQuestions",store.get("hardQuestions",[]).filter(id=>!String(id).startsWith("efsane-")));
+  store.set("hardQuestionItems",store.get("hardQuestionItems",[]).filter(q=>!isEfsane(q)));
   store.set("v24_4m_efsane_removed",true);
 }
 

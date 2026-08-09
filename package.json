@@ -1,12 +1,13 @@
 {
   "name": "muzik-sinavi",
-  "version": "26.18.0",
+  "version": "26.26.0",
   "private": true,
   "scripts": {
     "android:add": "npx cap add android",
     "android:sync": "npx cap sync android",
     "android:open": "npx cap open android",
     "build:apk": "cd android && ./gradlew assembleDebug",
+    "test:quality": "node tests/real2026-quality.test.js && node tests/real2026-integration.test.js && node tests/real2026-resilience.test.js",
     "ios:sync": "npx cap sync ios",
     "ios:open": "npx cap open ios"
   },
